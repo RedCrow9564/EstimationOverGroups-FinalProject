@@ -3,7 +3,7 @@ from numpy.fft import ifft
 from scipy.linalg import eigh, block_diag, circulant
 from scipy.sparse.linalg import eigsh
 from Infrastructure.utils import ex, Union, List, Scalar, Vector, Matrix
-from polyspectra_estimation import estimate_power_spectrum, estimate_trispectrum, estimate_trispectrum_v2
+from polyspectra_estimation import estimate_power_spectrum, estimate_trispectrum_v2
 from vectorized_actions import extract_diagonals, construct_estimator, vectorized_kron
 
 
@@ -21,8 +21,8 @@ def estimate_covariance_up_to_phases(observations_fourier: Matrix, signal_length
     tri_spectrum = estimate_trispectrum_v2(observations_fourier)
 
     # TODO: Implement the optimization step for both real and complex data.
-
     g = np.asfortranarray(np.tile(np.eye(signal_length, dtype=data_type), (signal_length - 1, 1, 1)))
+
     diagonals: Matrix = extract_diagonals(g, signal_length)
     estimated_covariance: Matrix = construct_estimator(diagonals, power_spectrum, signal_length, noise_power)
     return exact_covariance  # TODO: Replace with estimated_covariance

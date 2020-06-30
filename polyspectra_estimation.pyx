@@ -26,7 +26,7 @@ def estimate_power_spectrum(const complex[:, ::1] observations_fourier) -> Matri
     """
     return np.mean(np.power(np.abs(observations_fourier), 2), axis=0)
 
-def estimate_trispectrum(const complex[:, ::1] observations_fourier):
+def estimate_trispectrum_naive(const complex[:, ::1] observations_fourier):
     """
     The function for estimating a signal's tri-spectrum from its observations.
 

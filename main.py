@@ -10,7 +10,7 @@ to the configured results folder. Example for running an experiment: ``python ma
 
 """
 import numpy as np
-from numpy import roll, log10
+from numpy import roll
 from numpy.linalg import norm
 from numpy.random import Generator, PCG64
 from numpy.fft import fft
