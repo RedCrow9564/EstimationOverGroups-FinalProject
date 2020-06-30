@@ -117,9 +117,9 @@ def _load_all_csv(folder_path: str, field_in_table: str, take_files_names: bool)
 def plot_results(results_path) -> None:
 
     g = GraphManager("Testing graph name", 2)
-    run_times, legends = _load_all_csv(results_path, LogFields.DurationInSeconds)
-    compared_data_sizes: Vector = list(run_time_experiments_config["run_time_compared_data_sizes"])
-    if not is_empty(legends):
-        g.add_run_time_plot(compared_data_sizes, run_times, sub_folder, legends, "-")
-
-    g.show()
+    # run_times, legends = _load_all_csv(results_path, LogFields.DurationInSeconds)
+    # compared_data_sizes: Vector = list(run_time_experiments_config["run_time_compared_data_sizes"])
+    # if not is_empty(legends):
+    #     g.add_run_time_plot(compared_data_sizes, run_times, sub_folder, legends, "-")
+    #
+    # g.show()
