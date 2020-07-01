@@ -29,6 +29,39 @@ def estimate_covariance_up_to_phases(observations_fourier: Matrix, signal_length
 
 
 def phase_retrieval(covariance_estimator: Matrix, signal_length: int, approximation_rank: Union[int, None]) -> Matrix:
+    """
+
+    """
+
+    # Building the coefficients matrix A.
+    matrix_a = coefficient_matrix_construction(covariance_estimator, signal_length, approximation_rank)
+    # Finding the singular vector which corresponds to the smallest singular-value of A.
+    b = np.dot(np.conj(matrix_a).T, matrix_a)
+    print(f'{b.shape}')
+    val, v = eigh(b, overwrite_a=False, overwrite_b=False, check_finite=False, eigvals=(0, 1))
+
+    # Finding the matching angles
+    v = v[:, 1][:signal_length]
+    arguments_vector = np.angle(v)
+    angles = np.cumsum(arguments_vector[1:])
+    angles = -angles + (angles[signal_length - 2] + arguments_vector[0]) / signal_length * \
+        np.arange(1, signal_length, 1)
+    print(angles)
+    phases: Vector = np.exp(-1j * angles)
+    phases = np.insert(phases, 0, 1)
+    print(phases)
+
+    # Multiplying by the negative phases to find the Fourier-basis covariance
+    covariance_estimator = np.multiply(covariance_estimator, circulant(phases))
+
+    # Converting the estimator back to the standard basis
+    covariance_estimator = np.conj(ifft(covariance_estimator, axis=0, norm="ortho").T)
+    covariance_estimator = np.conj(ifft(covariance_estimator, axis=0, norm="ortho").T)
+    return covariance_estimator
+
+
+def coefficient_matrix_construction(covariance_estimator: Matrix, signal_length: int,
+                                    approximation_rank: Union[int, None]) -> Matrix:
     hi_i = np.power(np.abs(covariance_estimator), 2)
     rotated_mat = covariance_estimator.copy()
     rank_sqr = approximation_rank ** 2 if approximation_rank is not None else signal_length - 1
@@ -60,19 +93,4 @@ def phase_retrieval(covariance_estimator: Matrix, signal_length: int, approximat
         hi_i = np.multiply(covariance_estimator, np.conj(np.roll(rotated_mat, shift=1, axis=0)))
 
     matrix_a = np.hstack((all_m_mats, -block_diag(*vectorized_kron(all_eigenvectors))))
-    b = np.dot(np.conj(matrix_a).T, matrix_a)
-    print(f'{b.shape}')
-    val, v = eigh(b, overwrite_a=False, overwrite_b=False, check_finite=False, eigvals=(0, 1))
-    v = v[:, 1][:signal_length]
-    arguments_vector = np.angle(v)
-    angles = np.cumsum(arguments_vector[1:])
-    angles = -angles + (angles[signal_length - 2] + arguments_vector[0]) / signal_length * \
-             np.arange(1, signal_length, 1)
-    print(angles)
-    phases: Vector = np.exp(-1j * angles)
-    phases = np.insert(phases, 0, 1)
-    print(phases)
-    covariance_estimator = np.multiply(covariance_estimator, circulant(phases))
-    covariance_estimator = np.conj(ifft(covariance_estimator, axis=0, norm="ortho").T)
-    covariance_estimator = np.conj(ifft(covariance_estimator, axis=0, norm="ortho").T)
-    return covariance_estimator
+    return matrix_a
