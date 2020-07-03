@@ -8,7 +8,7 @@ from a given matrix of its observations.
 """
 import numpy as np
 cimport numpy as np
-from Infrastructure.utils import Matrix
+from Infrastructure.utils import Matrix, ThreeDMatrix
 from libc.math cimport ceil
 
 cdef extern from "<complex>" namespace "std" nogil:
@@ -26,7 +26,7 @@ def estimate_power_spectrum(const complex[:, ::1] observations_fourier) -> Matri
     """
     return np.mean(np.power(np.abs(observations_fourier), 2), axis=0)
 
-def estimate_trispectrum_naive(const complex[:, ::1] observations_fourier):
+def estimate_trispectrum_naive(const complex[:, ::1] observations_fourier) -> ThreeDMatrix:
     """
     The function for estimating a signal's tri-spectrum from its observations.
 
@@ -61,7 +61,7 @@ cdef inline void trispectrum_estimation_v1(const complex[:, ::1] observations_fo
                 s = (s + 1) % signal_length
                 temp = 0
 
-def estimate_trispectrum_v2(const complex[:, ::1] observations_fourier):
+def estimate_trispectrum_v2(const complex[:, ::1] observations_fourier) -> ThreeDMatrix:
     """
     The function for estimating a signal's tri-spectrum from its observations.
 

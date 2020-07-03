@@ -2,7 +2,8 @@ import numpy as np
 from numpy.fft import ifft
 from scipy.linalg import eigh, block_diag, circulant
 from scipy.sparse.linalg import eigsh
-from Infrastructure.utils import ex, Union, List, Scalar, Vector, Matrix
+import cvxpy as cp
+from Infrastructure.utils import Union, List, Scalar, Vector, Matrix, ThreeDMatrix, Callable
 from polyspectra_estimation import estimate_power_spectrum, estimate_trispectrum_v2
 from vectorized_actions import extract_diagonals, construct_estimator, vectorized_kron
 
@@ -10,7 +11,9 @@ from vectorized_actions import extract_diagonals, construct_estimator, vectorize
 def low_rank_multi_reference_factor_analysis(
         observations_fourier: Matrix, signal_length: int, approximation_rank: Union[int, None],
         noise_power: float, data_type, exact_covariance) -> Matrix:
-    estimator: Matrix = estimate_covariance_up_to_phases(observations_fourier, signal_length, noise_power, data_type, exact_covariance)
+    # TODO: Remove the exact_covariance argument for real experiments.
+    estimator: Matrix = estimate_covariance_up_to_phases(observations_fourier, signal_length, noise_power, data_type,
+                                                         exact_covariance)
     estimator = phase_retrieval(estimator, signal_length, approximation_rank)
     return estimator
 
@@ -18,8 +21,10 @@ def low_rank_multi_reference_factor_analysis(
 def estimate_covariance_up_to_phases(observations_fourier: Matrix, signal_length: int, noise_power: float,
                                      data_type, exact_covariance) -> Matrix:
     power_spectrum: Vector = estimate_power_spectrum(observations_fourier)
-    tri_spectrum = estimate_trispectrum_v2(observations_fourier)
+    tri_spectrum: ThreeDMatrix = estimate_trispectrum_v2(observations_fourier)
 
+    # Optimization step
+    # g = perform_optimization(tri_spectrum, power_spectrum, signal_length, data_type)
     # TODO: Implement the optimization step for both real and complex data.
     g = np.asfortranarray(np.tile(np.eye(signal_length, dtype=data_type), (signal_length - 1, 1, 1)))
 
@@ -28,13 +33,58 @@ def estimate_covariance_up_to_phases(observations_fourier: Matrix, signal_length
     return exact_covariance  # TODO: Replace with estimated_covariance
 
 
+def create_optimization_objective(tri_spectrum, power_spectrum, data_type) -> Callable:
+    g_zero = np.outer(power_spectrum, power_spectrum)
+    signal_length = len(power_spectrum)
+
+    def objective(matrices_list) -> float:
+        fit_score = 0.0
+        for k1 in range(signal_length):
+            for k2 in range(signal_length):
+                other_index = (k2 - k1) % signal_length
+                for m in range(signal_length):
+                    k1_plus_m = (k1 + m) % signal_length
+                    current_term = tri_spectrum[k1, k1_plus_m, (k2 + m) % signal_length]
+                    if other_index == 0:
+                        current_term -= g_zero[k1, k1_plus_m]
+                    else:
+                        current_term -= matrices_list[other_index - 1][k1, k1_plus_m]
+                    if m == 0:
+                        current_term -= g_zero[k1, k2]
+                    else:
+                        current_term -= matrices_list[m - 1][k1, k2]
+
+                    if data_type in [np.float32, np.float64]:
+                        next_index: int = (k1 + k2 + m) % (signal_length - 1)
+                        if next_index == 0:
+                            current_term -= g_zero[- k2 % signal_length, (-k2 - m) % signal_length]
+                        else:
+                            current_term -= matrices_list[next_index - 1][
+                                - k2 % signal_length, (-k2 - m) % signal_length]
+
+                    fit_score += cp.abs(current_term) ** 2
+        return fit_score
+    return objective
+
+
+def perform_optimization(tri_spectrum: ThreeDMatrix, power_spectrum: Matrix, signal_length: int,
+                         data_type) -> ThreeDMatrix:
+    optimization_objective: Callable = create_optimization_objective(tri_spectrum, power_spectrum, data_type)
+    symbolic_matrices = [cp.Variable((signal_length, signal_length), PSD=True) for _ in range(signal_length - 1)]
+    problem = cp.Problem(cp.Minimize(optimization_objective(symbolic_matrices)), [])
+    min_fit_score = problem.solve(verbose=True)
+    print(f'Min score: {min_fit_score}')
+    print([mat.value for mat in symbolic_matrices])
+    return np.array([mat.value for mat in symbolic_matrices], order='F')
+
+
 def phase_retrieval(covariance_estimator: Matrix, signal_length: int, approximation_rank: Union[int, None]) -> Matrix:
     """
 
     """
 
     # Building the coefficients matrix A.
-    matrix_a = coefficient_matrix_construction(covariance_estimator, signal_length, approximation_rank)
+    matrix_a: Matrix = coefficient_matrix_construction(covariance_estimator, signal_length, approximation_rank)
     # Finding the singular vector which corresponds to the smallest singular-value of A.
     b = np.dot(np.conj(matrix_a).T, matrix_a)
     print(f'{b.shape}')
@@ -62,12 +112,13 @@ def phase_retrieval(covariance_estimator: Matrix, signal_length: int, approximat
 
 def coefficient_matrix_construction(covariance_estimator: Matrix, signal_length: int,
                                     approximation_rank: Union[int, None]) -> Matrix:
-    hi_i = np.power(np.abs(covariance_estimator), 2)
-    rotated_mat = covariance_estimator.copy()
-    rank_sqr = approximation_rank ** 2 if approximation_rank is not None else signal_length - 1
-    least_eigenvalue_index = signal_length - rank_sqr
-    all_eigenvectors = np.empty((signal_length, signal_length, rank_sqr), order="F")
-    all_m_mats = np.empty((signal_length ** 3, signal_length))
+    hi_i: Matrix = np.power(np.abs(covariance_estimator), 2)
+    rotated_mat: Matrix = covariance_estimator.copy()
+    rank_sqr: int = approximation_rank ** 2 if approximation_rank is not None else signal_length - 1
+    least_eigenvalue_index: int = signal_length - rank_sqr
+    all_eigenvectors: Matrix = np.empty((signal_length, signal_length, rank_sqr), order="F",
+                                        dtype=covariance_estimator.dtype)
+    all_m_mats: Matrix = np.empty((signal_length ** 3, signal_length), dtype=covariance_estimator.dtype)
 
     first_indices = np.arange(0, signal_length ** 2, signal_length + 1)
     for i in range(signal_length):

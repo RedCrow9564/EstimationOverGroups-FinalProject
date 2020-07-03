@@ -7,8 +7,8 @@ This module contains all frequently-used methods and objects which can be shared
 For example, data types name used for type-hinting, a basic enum class :class:`BaseEnum`, methods for measuring
 run-time of a given function.
 """
-from typing import List, Dict, Callable, Union, Iterator, Tuple
-from nptyping import Array
+from typing import List, Dict, Callable, Union, Iterator, Tuple, Any, TypeVar
+from nptyping import NDArray
 import inspect
 import time
 import pandas as pd
@@ -22,12 +22,10 @@ ex = Experiment(name="Initializing project", interactive=False)
 pyximportcpp.install(setup_args={"include_dirs": numpy.get_include()}, reload_support=True)
 
 # Naming data types for type hinting.
-Number = Union[int, complex]
-Scalar = Union[Number, Array[complex, 1, 1], Array[int, 1, 1]]
-RowVector = Union[List[Scalar], Array[float, 1, ...], Array[int, 1, ...], Scalar]
-ColumnVector = Union[List[Scalar], Array[float, ..., 1], Array[int, ..., 1], Scalar]
-Vector = Union[RowVector, ColumnVector]
-Matrix = Union[List[Vector], Array[float], Array[int], Vector, Scalar]
+Scalar = Union[float, complex]
+Vector = NDArray[(Any,), Any]
+Matrix = NDArray[(Any, Any), Any]
+ThreeDMatrix = NDArray[(Any, Any, Any), Any]
 
 
 class _MetaEnum(type):

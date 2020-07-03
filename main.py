@@ -87,7 +87,8 @@ def main(signal_lengths: List[int], observations_numbers: List[int], approximati
             mean_error += calc_estimation_error(exact_covariance, estimated_covariance)
 
         mean_error /= trials_num
-        print(f'Finished experiment of signal length L={signal_length}, r={approximation_rank}, noise={noise_power}')
+        print(f'Finished experiment of signal length L={signal_length}, r={approximation_rank}, noise={noise_power} ' +
+              f'with error {mean_error}')
 
         # Appending all the experiment results to the log.
         results_log.append(LogFields.DataSize, signal_length)

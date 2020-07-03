@@ -3,14 +3,14 @@
 """
 vectorized_actions.pyx - vectorized algorithms module
 ======================================================
-This module contains methods for are implemented in Cython for Run-time improvements
+This module contains methods for are implemented in Cython for run-time improvements
 """
 import numpy as np
 cimport numpy as np
 from numpy import kron
 from scipy.linalg import eigh
 from libc.math cimport sqrt
-from Infrastructure.utils import Matrix
+from Infrastructure.utils import Scalar, Matrix, Callable
 
 ctypedef fused double_or_complex:
     complex
