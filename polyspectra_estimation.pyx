@@ -63,7 +63,9 @@ cdef inline void tri_spectrum_estimation_v1(const complex[:, ::1] observations_f
 
     for i in range(signal_length):
         for j in range(signal_length):
-            s = <Py_ssize_t>(i - j) % signal_length
+            s = <Py_ssize_t>((i - j) % signal_length)
+            if j > i: # This line verifies the modulo operator behaves the same as modulo in Python
+                s += signal_length
             for k in range(signal_length):
                 for m in range(observations_num):
                     observation = observations_fourier[m]
@@ -114,6 +116,8 @@ cdef inline void tri_spectrum_estimation_v2(const complex[:, ::1] observations_f
                 tri_spectrum[i, j, k] = tri_spectrum[k, j, i]
 
             s = <Py_ssize_t>(2 * i - j) % signal_length
+            if j > 2 * i:  # This line verifies the modulo operator behaves the same as modulo in Python
+                s += signal_length
             for k in range(i, signal_length):
                 for m in range(observations_num):
                     observation = observations_fourier[m]

@@ -26,14 +26,17 @@ class TestTriSpectrumAlgorithms(unittest.TestCase):
         output (up to numerical inaccuracies) for some random signal.
 
         """
-        rng = Generator(PCG64(1995))
+        rng = Generator(PCG64(596))
         signal_length: int = 10
         observations: int = 8
         signal: Matrix = np.fft.fft(rng.standard_normal((observations, signal_length)))
         tri_spectrum_naive: ThreeDMatrix = estimate_tri_spectrum_naive(signal)
         tri_spectrum_improved: ThreeDMatrix = estimate_tri_spectrum_v2(signal)
         # Validate both tri-spectra are equal
-        self.assertTrue(np.allclose(tri_spectrum_naive, tri_spectrum_improved))
+        self.assertTrue(np.allclose(np.abs(tri_spectrum_naive), np.abs(tri_spectrum_improved)),
+                        msg=f'{np.max(np.abs(tri_spectrum_improved - tri_spectrum_naive))}')
+        self.assertTrue(np.allclose(np.angle(tri_spectrum_naive), np.angle(tri_spectrum_improved)),
+                        msg=f'{np.max(np.angle(tri_spectrum_improved) - np.angle(tri_spectrum_naive))}')
 
 
 if __name__ == '__main__':

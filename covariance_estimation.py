@@ -23,7 +23,7 @@ def estimate_covariance_up_to_phases(observations_fourier: Matrix, signal_length
     tri_spectrum: ThreeDMatrix = estimate_tri_spectrum_v2(observations_fourier)
 
     # Optimization step
-    # g = perform_optimization(tri_spectrum, power_spectrum, signal_length, data_type)
+    #g = perform_optimization(tri_spectrum, power_spectrum, signal_length, data_type)
     # TODO: Implement the optimization step for both real and complex data.
     g = np.asfortranarray(np.tile(np.eye(signal_length, dtype=data_type), (signal_length - 1, 1, 1)))
 
@@ -34,6 +34,7 @@ def estimate_covariance_up_to_phases(observations_fourier: Matrix, signal_length
     exact_cov_fourier_basis: Matrix = np.conj(fft(exact_covariance, axis=0, norm="ortho").T)
     exact_cov_fourier_basis: Matrix = np.conj(fft(exact_cov_fourier_basis, axis=0, norm="ortho").T)
     return exact_cov_fourier_basis
+    # return estimated_covariance
 
 
 def create_optimization_objective(tri_spectrum, power_spectrum, data_type) -> Callable:
