@@ -23,14 +23,16 @@ All the packages, except for Sacred, are available as well using 'conda' package
 
 The Unit-Test files are:
 
-* [test_????.py](UnitTests/test_????.py) - 
+* [test_diagonal_extraction_and_construction.py](UnitTests/test_diagonal_extraction_and_construction.py) - Tests for components of the first stage of the algorithm: diagonals estimation and estimator construction.
+* [test_phase_retrieval_actions.py](UnitTests/test_phase_retrieval_actions.py) - Tests for components of the second stage of the algorithm: coefficients matrix construction and Fourier basis transition.
+* [test_tri_spectrum_estimation.py](UnitTests/test_tri_spectrum_estimation.py) - Tests for the tri-spectrum's estimation methods.
 
 Running any of these tests can be performed by:
 ```
 <python_path> -m unittest <test_file_path>
 ```
 ## Acknowledgments
-Credits for the original algorithms, paper and results of [[1]](#1) belong to its respectful authors: Prof. Yoel Shkolnisky and Dr. Boris Landa.
+Credits for the original algorithms, paper and results of [[1]](#1) belong to its respectful authors: [Prof. Yoel Shkolnisky](https://en-exact-sciences.tau.ac.il/profile/yoelsh) and Dr. Boris Landa.
 
 ## License
 

@@ -1,10 +1,9 @@
 import numpy as np
-from numpy.fft import ifft
+from numpy.fft import ifft, fft
 from scipy.linalg import eigh, block_diag, circulant
-from scipy.sparse.linalg import eigsh
 import cvxpy as cp
-from Infrastructure.utils import Union, List, Scalar, Vector, Matrix, ThreeDMatrix, Callable
-from polyspectra_estimation import estimate_power_spectrum, estimate_trispectrum_v2
+from Infrastructure.utils import Union, Vector, Matrix, ThreeDMatrix, Callable
+from polyspectra_estimation import estimate_power_spectrum, estimate_tri_spectrum_v2
 from vectorized_actions import extract_diagonals, construct_estimator, vectorized_kron
 
 
@@ -21,7 +20,7 @@ def low_rank_multi_reference_factor_analysis(
 def estimate_covariance_up_to_phases(observations_fourier: Matrix, signal_length: int, noise_power: float,
                                      data_type, exact_covariance) -> Matrix:
     power_spectrum: Vector = estimate_power_spectrum(observations_fourier)
-    tri_spectrum: ThreeDMatrix = estimate_trispectrum_v2(observations_fourier)
+    tri_spectrum: ThreeDMatrix = estimate_tri_spectrum_v2(observations_fourier)
 
     # Optimization step
     # g = perform_optimization(tri_spectrum, power_spectrum, signal_length, data_type)
@@ -30,7 +29,11 @@ def estimate_covariance_up_to_phases(observations_fourier: Matrix, signal_length
 
     diagonals: Matrix = extract_diagonals(g, signal_length)
     estimated_covariance: Matrix = construct_estimator(diagonals, power_spectrum, signal_length, noise_power)
-    return exact_covariance  # TODO: Replace with estimated_covariance
+
+    # TODO: Remove these two lines and replace the return statement with return of estimated_covariance
+    exact_cov_fourier_basis: Matrix = np.conj(fft(exact_covariance, axis=0, norm="ortho").T)
+    exact_cov_fourier_basis: Matrix = np.conj(fft(exact_cov_fourier_basis, axis=0, norm="ortho").T)
+    return exact_cov_fourier_basis
 
 
 def create_optimization_objective(tri_spectrum, power_spectrum, data_type) -> Callable:
@@ -87,19 +90,12 @@ def phase_retrieval(covariance_estimator: Matrix, signal_length: int, approximat
     matrix_a: Matrix = coefficient_matrix_construction(covariance_estimator, signal_length, approximation_rank)
     # Finding the singular vector which corresponds to the smallest singular-value of A.
     b = np.dot(np.conj(matrix_a).T, matrix_a)
-    print(f'{b.shape}')
-    val, v = eigh(b, overwrite_a=False, overwrite_b=False, check_finite=False, eigvals=(0, 1))
+    val, v = eigh(b, overwrite_a=False, overwrite_b=False, check_finite=False, eigvals=(0, 2))
 
     # Finding the matching angles
-    v = v[:, 1][:signal_length]
-    arguments_vector = np.angle(v)
-    angles = np.cumsum(arguments_vector[1:])
-    angles = -angles + (angles[signal_length - 2] + arguments_vector[0]) / signal_length * \
-        np.arange(1, signal_length, 1)
-    print(angles)
+    angles = estimate_angles(v, signal_length)
     phases: Vector = np.exp(-1j * angles)
     phases = np.insert(phases, 0, 1)
-    print(phases)
 
     # Multiplying by the negative phases to find the Fourier-basis covariance
     covariance_estimator = np.multiply(covariance_estimator, circulant(phases))
@@ -112,36 +108,45 @@ def phase_retrieval(covariance_estimator: Matrix, signal_length: int, approximat
 
 def coefficient_matrix_construction(covariance_estimator: Matrix, signal_length: int,
                                     approximation_rank: Union[int, None]) -> Matrix:
-    hi_i: Matrix = np.power(np.abs(covariance_estimator), 2)
-    rotated_mat: Matrix = covariance_estimator.copy()
     rank_sqr: int = approximation_rank ** 2 if approximation_rank is not None else signal_length - 1
     least_eigenvalue_index: int = signal_length - rank_sqr
+    last_index: int = signal_length ** 2
+    transition_index: int = last_index - signal_length
+
+    hi_i: Matrix = np.power(np.abs(covariance_estimator), 2)
+    rotated_mat: Matrix = covariance_estimator
     all_eigenvectors: Matrix = np.empty((signal_length, signal_length, rank_sqr), order="F",
                                         dtype=covariance_estimator.dtype)
-    all_m_mats: Matrix = np.empty((signal_length ** 3, signal_length), dtype=covariance_estimator.dtype)
+    all_m_mats: Matrix = np.zeros((signal_length ** 3, signal_length), dtype=covariance_estimator.dtype)
+    sampled_indices: Matrix = np.empty((signal_length, signal_length), dtype=int)
+    sampled_indices[0] = np.arange(0, last_index, signal_length + 1)
+    for m in range(1, signal_length):
+        sampled_hi_indices = np.arange(m, transition_index, signal_length + 1)
+        sampled_indices[m] = np.hstack((sampled_hi_indices, np.arange(transition_index,
+                                                                      last_index, signal_length + 1)))
+        transition_index -= signal_length
 
-    first_indices = np.arange(0, signal_length ** 2, signal_length + 1)
     for i in range(signal_length):
         all_eigenvectors[i] = eigh(hi_i, overwrite_b=False, check_finite=False,
                                    eigvals=(least_eigenvalue_index, signal_length - 1))[1]
         rotated_mat = np.roll(rotated_mat, shift=1, axis=1)
         hi_i = np.multiply(covariance_estimator, np.conj(rotated_mat))
-        transition_index: int = 0
-        last_index: int = signal_length ** 2
+        hi_i_plus_one_flat = hi_i.flatten('F')
 
         for m in range(signal_length):
-            if m == 0:
-                sampled_hi_indices = first_indices.copy()
-            else:
-                transition_index += signal_length
-                sampled_hi_indices = np.arange(signal_length - m, transition_index, signal_length + 1)
-                last_index -= 1
-                sampled_hi_indices = np.hstack((sampled_hi_indices, np.arange(transition_index,
-                                                                              last_index, signal_length + 1)))
-            all_m_mats[sampled_hi_indices + i * signal_length ** 2, m] = hi_i.flatten('F')[sampled_hi_indices]
+            all_m_mats[sampled_indices[m] + i * last_index, m] = hi_i_plus_one_flat[sampled_indices[m]]
 
         rotated_mat = np.roll(rotated_mat, shift=1, axis=0)
-        hi_i = np.multiply(covariance_estimator, np.conj(np.roll(rotated_mat, shift=1, axis=0)))
+        hi_i = np.multiply(covariance_estimator, np.conj(rotated_mat))
 
     matrix_a = np.hstack((all_m_mats, -block_diag(*vectorized_kron(all_eigenvectors))))
     return matrix_a
+
+
+def estimate_angles(eigenvector: Vector, signal_length: int) -> Vector:
+    v = eigenvector[:, 0][:signal_length]
+    arguments_vector = np.angle(v)
+    angles = np.cumsum(arguments_vector[1:])
+    angles = -angles + (angles[signal_length - 2] + arguments_vector[0]) / signal_length * \
+             np.arange(1, signal_length, 1)
+    return angles

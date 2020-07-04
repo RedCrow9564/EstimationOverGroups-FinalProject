@@ -1,3 +1,13 @@
+# -*- coding: utf-8 -*-
+"""
+pyximportcpp.py - Cython compilation module in C++
+==================================================
+
+This module is a short script which guarantees the import of pyximportcpp (instead of pyximport)
+results in Cython code compilation to C++ (instead of the default C language).
+Credits for this code belong to "user4967717" in "Stack Overflow"
+(https://stackoverflow.com/questions/21938065/how-to-configure-pyximport-to-always-make-a-cpp-file).
+"""
 import pyximport
 from pyximport import install
 
