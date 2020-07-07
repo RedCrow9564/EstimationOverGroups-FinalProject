@@ -14,7 +14,8 @@ def create_discrete_distribution(distribution_type: str, distribution_length: in
         return distribution
 
 
-def generate_signal(signal_length: int, approximation_rank: int, data_type, random_generator) -> (Vector, Matrix):
+def generate_observations(signal_length: int, approximation_rank: int, observation_num: int,
+                    data_type, random_generator) -> (Matrix, Matrix):
     # Picking random eigenvalues (variances) for the exact covariance matrix.
     eigenvalues: Vector = random_generator.uniform(size=approximation_rank)
     eigenvalues /= norm(eigenvalues, ord=1)
@@ -27,14 +28,19 @@ def generate_signal(signal_length: int, approximation_rank: int, data_type, rand
     covariance: Matrix = (eigenvectors * eigenvalues).dot(np.conj(eigenvectors.T))
 
     # Sampling the signal from this covariance matrix.
-    signal: Vector = np.multiply(eigenvalues, random_generator.standard_normal(size=approximation_rank))
-    signal = eigenvectors.dot(signal)
+    signal: Matrix = random_generator.standard_normal(size=(approximation_rank, observation_num))
+    variances: Matrix = np.tile(np.sqrt(eigenvalues).reshape((2, 1)), (1, observation_num))
+    signal = np.multiply(signal, variances)
+    if data_type in [np.complex128, np.complex64, np.complex]:
+        variances *= np.sqrt(0.5)
+        signal = np.sqrt(0.5) * signal.astype(data_type)
+        signal += 1j * random_generator.normal(scale=variances, size=signal.shape)
+    signal = np.dot(eigenvectors, signal).T
     return signal, covariance
 
 
-def generate_observations(signal: Matrix, observations_num: int, shifts: List[int], noise_power: float,
-                          data_type, random_generator) -> Matrix:
-    observations = np.tile(signal, (observations_num, 1))
+def generate_shifts_and_noise(observations: Matrix, shifts: List[int], noise_power: float,
+                              data_type, random_generator) -> Matrix:
     for i, shift in enumerate(shifts):
         observations[i] = np.roll(observations[i], shift)
     if data_type in [np.complex128, np.complex64, np.complex]:

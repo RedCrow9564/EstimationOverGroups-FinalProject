@@ -9,7 +9,6 @@ from a given matrix of its observations.
 import numpy as np
 cimport numpy as np
 from Infrastructure.utils import Matrix, ThreeDMatrix
-from libc.math cimport ceil
 
 cdef extern from "<complex>" namespace "std" nogil:
     double complex conj(double complex z)

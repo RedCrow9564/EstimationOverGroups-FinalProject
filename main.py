@@ -17,7 +17,7 @@ from numpy.fft import fft
 from itertools import product
 from Infrastructure.utils import ex, DataLog, Union, List, Scalar, Vector, Matrix
 from Infrastructure.enums import LogFields, DistributionType
-from data_generation import create_discrete_distribution, generate_signal, generate_observations
+from data_generation import create_discrete_distribution, generate_observations, generate_shifts_and_noise
 from covariance_estimation import low_rank_multi_reference_factor_analysis
 
 
@@ -44,8 +44,8 @@ def config():
     """
 
     data_type = np.complex128
-    signal_lengths: [int] = [5]
-    observations_numbers: List[int] = [8]
+    signal_lengths: [int] = [10]
+    observations_numbers: List[int] = [100000]
     approximation_ranks: List[Union[int, None]] = [2]
     noise_powers: List[float] = [0.0]
     trials_num: int = 1
@@ -75,19 +75,19 @@ def main(signal_lengths: List[int], observations_numbers: List[int], approximati
         trials_seeds: Vector = np.arange(first_seed, first_seed + trials_num).tolist()
         for trial_seed in trials_seeds:
             rng = Generator(PCG64(trial_seed))  # Set trial's random generator.
-            exact_signal, exact_covariance = generate_signal(signal_length, approximation_rank, data_type, rng)
+            observations, exact_covariance = generate_observations(signal_length, approximation_rank, observations_num,
+                                                                   data_type, rng)
             observations_shifts: List[int] = rng.choice(signal_length, size=observations_num, p=shifts_distribution)
-            observations: Matrix = generate_observations(exact_signal, observations_num, observations_shifts,
-                                                         noise_power, data_type, rng)
-            observations_fourier: Matrix = fft(observations, axis=1)
+            observations = generate_shifts_and_noise(observations, observations_shifts, noise_power, data_type, rng)
+            observations_fourier: Matrix = fft(observations, norm="ortho", axis=1)
             # TODO: Remove the exact_covariance argument for real experiments.
             estimated_covariance: Matrix = low_rank_multi_reference_factor_analysis(
                 observations_fourier, signal_length, approximation_rank, noise_power, data_type, exact_covariance)
             mean_error += calc_estimation_error(exact_covariance, estimated_covariance)
 
         mean_error /= trials_num
-        print(f'Finished experiment of signal length L={signal_length}, r={approximation_rank}, noise={noise_power} ' +
-              f'with error {mean_error}')
+        print(f'Finished experiment of signal length L={signal_length}, n={observations_num}, '
+              f'r={approximation_rank}, noise={noise_power} with error {mean_error}')
 
         # Appending all the experiment results to the log.
         results_log.append(LogFields.DataSize, signal_length)

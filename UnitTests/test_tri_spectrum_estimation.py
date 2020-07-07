@@ -29,7 +29,7 @@ class TestTriSpectrumAlgorithms(unittest.TestCase):
         rng = Generator(PCG64(596))
         signal_length: int = 10
         observations: int = 8
-        signal: Matrix = np.fft.fft(rng.standard_normal((observations, signal_length)))
+        signal: Matrix = np.fft.fft(rng.standard_normal((observations, signal_length)), norm="ortho", axis=1)
         tri_spectrum_naive: ThreeDMatrix = estimate_tri_spectrum_naive(signal)
         tri_spectrum_improved: ThreeDMatrix = estimate_tri_spectrum_v2(signal)
         # Validate both tri-spectra are equal

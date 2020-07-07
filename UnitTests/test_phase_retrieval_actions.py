@@ -10,7 +10,7 @@ constructing the coefficients matrix and the Fourier basis transition of the fix
 import unittest
 import numpy as np
 from numpy.random import Generator, PCG64
-from numpy.fft import ifft
+from numpy.fft import ifft, fft
 from scipy.linalg import dft, eigh, block_diag, circulant
 from Infrastructure.utils import Matrix, Union
 from covariance_estimation import coefficient_matrix_construction
@@ -37,6 +37,12 @@ class TestPhaseRetrievalActions(unittest.TestCase):
         dft_mat: Matrix = dft(n, scale="sqrtn")
         expected_output: Matrix = np.conj(dft_mat.T).dot(mat).dot(dft_mat)
         self.assertTrue(np.allclose(tested_output, expected_output))
+
+        mat: Matrix = rng.standard_normal((n, n))
+        mat_fourier: Matrix = np.conj(fft(mat, axis=0, norm="ortho").T)
+        mat_fourier: Matrix = np.conj(fft(mat_fourier, axis=0, norm="ortho").T)
+        expected_output: Matrix = dft_mat.dot(mat).dot(np.conj(dft_mat.T))
+        self.assertTrue(np.allclose(mat_fourier, expected_output))
 
     def test_coefficient_matrix_construction(self):
         """
