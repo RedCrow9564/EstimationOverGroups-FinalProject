@@ -54,3 +54,13 @@ class DistributionType(BaseEnum):
     """
     Uniform: str = "Uniform Distribution"
     Dirac: str = "Dirac Delta Distribution"
+
+
+class DistributionParams(BaseEnum):
+    """
+    The enum class of parameters for the shifts distribution. Possible values:
+
+    * ``DistributionParams.DeltaLocations``
+
+    """
+    DeltaLocations: str = "delta_locations"

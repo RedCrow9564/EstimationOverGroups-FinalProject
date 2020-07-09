@@ -15,9 +15,11 @@ from numpy.linalg import norm
 from numpy.random import Generator, PCG64
 from numpy.fft import fft
 from itertools import product
-from Infrastructure.utils import ex, DataLog, Union, List, Scalar, Vector, Matrix
-from Infrastructure.enums import LogFields, DistributionType
-from data_generation import create_discrete_distribution, generate_observations, generate_shifts_and_noise
+import warnings
+from Infrastructure.utils import ex, DataLog, Dict, Union, List, Scalar, Vector, Matrix
+from Infrastructure.enums import LogFields, DistributionType, DistributionParams
+from data_generation import create_discrete_distribution, generate_covariance, generate_observations, \
+    generate_shifts_and_noise
 from covariance_estimation import low_rank_multi_reference_factor_analysis
 
 
@@ -44,13 +46,16 @@ def config():
     """
 
     data_type = np.complex128
-    signal_lengths: [int] = [10]
-    observations_numbers: List[int] = [100000]
+    signal_lengths: [int] = [3]
+    observations_numbers: List[int] = [1000]
     approximation_ranks: List[Union[int, None]] = [2]
     noise_powers: List[float] = [0.0]
     trials_num: int = 1
     first_seed: int = 200
     shifts_distribution_type = DistributionType.Uniform
+    distribution_params: Dict = {
+        DistributionParams.DeltaLocations: [1]
+    }
     experiment_name: str = "Testing Code Infrastructure"
     results_path: str = r'Results/'
 
@@ -58,25 +63,32 @@ def config():
 @ex.automain
 def main(signal_lengths: List[int], observations_numbers: List[int], approximation_ranks: List[int],
          noise_powers: List[float], shifts_distribution_type: str, trials_num: int, data_type, results_path: str,
-         experiment_name: str, first_seed: int) -> None:
+         experiment_name: str, first_seed: int, distribution_params: Dict) -> None:
     """ The main function of this project
 
     This functions performs the desired experiment according to the given configuration.
     The function runs the random_svd and random_id for every combination of data_size, approximation rank and increment
     given in the config and saves all the results to a csv file in the results folder (given in the configuration).
     """
+    rng = Generator(PCG64(first_seed))  # Set trial's random generator.
     results_log = DataLog(LogFields)  # Initializing an empty results log.
 
     for signal_length, noise_power, approximation_rank, observations_num in product(
             signal_lengths, noise_powers, approximation_ranks, observations_numbers):
-        shifts_distribution: List[float] = create_discrete_distribution(shifts_distribution_type, signal_length)
+        if approximation_rank >= np.sqrt(signal_length):
+            warnings.warn(f'Approximation rank {approximation_rank} is at least the square-root of the ' +
+                          f'signal length {signal_length}, consistency is NOT guaranteed!', Warning)
+        shifts_distribution: Vector = create_discrete_distribution(shifts_distribution_type, signal_length,
+                                                                   distribution_params)
 
         mean_error: float = 0
         trials_seeds: Vector = np.arange(first_seed, first_seed + trials_num).tolist()
+        exact_covariance, eigenvectors, eigenvalues = generate_covariance(signal_length, approximation_rank,
+                                                                          data_type, rng)
         for trial_seed in trials_seeds:
             rng = Generator(PCG64(trial_seed))  # Set trial's random generator.
-            observations, exact_covariance = generate_observations(signal_length, approximation_rank, observations_num,
-                                                                   data_type, rng)
+            observations = generate_observations(eigenvectors, eigenvalues, approximation_rank, observations_num,
+                                                 data_type, rng)
             observations_shifts: List[int] = rng.choice(signal_length, size=observations_num, p=shifts_distribution)
             observations = generate_shifts_and_noise(observations, observations_shifts, noise_power, data_type, rng)
             observations_fourier: Matrix = fft(observations, norm="ortho", axis=1)
