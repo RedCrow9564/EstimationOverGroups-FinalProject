@@ -63,7 +63,8 @@ def estimate_covariance_up_to_phases(observations_fourier: Matrix, signal_length
                       Warning)
     print(f'Covariance Fourier Diagonal: {np.real(np.diag(exact_cov_fourier_basis))}')
     print(f'Power spectrum: {power_spectrum}')
-    tri_diagonal = np.array([tri_spectrum[i, i, i] for i in range(signal_length)])
+    # exact_tri_spectrum: ThreeDMatrix = calc_exact_tri_spectrum(exact_cov_fourier_basis)
+    # print(f'Max tri-spectrum estimation error: {np.max(np.abs(exact_tri_spectrum - tri_spectrum))}')
 
     # Optimization step
     g = perform_optimization(tri_spectrum, power_spectrum, signal_length, data_type)
@@ -114,7 +115,9 @@ def perform_optimization(tri_spectrum: ThreeDMatrix, power_spectrum: Matrix, sig
                          for i in range(signal_length - 1)]
     problem = cp.Problem(cp.Minimize(optimization_objective(symbolic_matrices)), [])
 
-    min_fit_score = problem.solve(solver=cp.CVXOPT)
+    # print(f'Solvers: {cp.installed_solvers()}')
+    # print(f'Is convex? {problem.is_dcp()}')
+    min_fit_score = problem.solve()
     optimization_result = [mat.value for mat in symbolic_matrices]
 
     print(f'Min score: {min_fit_score}')
