@@ -56,7 +56,7 @@ def config():
     distribution_params: Dict = {
         DistributionParams.DeltaLocations: [1]
     }
-    experiment_name: str = "Testing Code Infrastructure"
+    experiment_name: str = "Error rate as a function on the observations number"
     results_path: str = r'Results/'
 
 
