@@ -9,6 +9,7 @@ import numpy as np
 cimport numpy as np
 from numpy import kron
 from scipy.linalg import eigh
+from numpy.fft import fft, ifft
 from libc.math cimport sqrt
 from Infrastructure.utils import Matrix, ThreeDMatrix
 
@@ -41,7 +42,7 @@ def extract_diagonals(double_or_complex[::1, :, :] matrices_arr, const int signa
 
     for i in range(signal_length - 1):
         eigenvalue, eigenvector = eigh(
-            matrices_arr[i], overwrite_a = True, overwrite_b = True, check_finite = False,
+            matrices_arr[i], overwrite_a=True, overwrite_b=True, check_finite=False,
             eigvals=(signal_length - 1, signal_length - 1))
         first_scaled_eigenvalue = sqrt(eigenvalue[0])
         for j in range(signal_length):
@@ -112,3 +113,17 @@ def construct_estimator(double_or_complex[::1, :] diagonals, const double[::1] p
             estimator[j, column_index] = diagonals[i - 1, j]
 
     return estimator
+
+
+def change_to_fourier_basis(double_or_complex[:, ::1] mat) -> Matrix:
+    cdef np.ndarray[complex, ndim=2] fourier_basis_mat = np.empty_like(mat, dtype=np.complex128)
+    fourier_basis_mat = np.conj(fft(mat, axis=0, norm="ortho").T)
+    fourier_basis_mat = np.conj(fft(fourier_basis_mat, axis=0, norm="ortho").T)
+    return fourier_basis_mat
+
+
+def change_from_fourier_basis(double_or_complex[:, ::1] mat) -> Matrix:
+    cdef np.ndarray[complex, ndim=2] original_basis_mat = np.empty_like(mat, dtype=np.complex128)
+    original_basis_mat = np.conj(ifft(mat, axis=0, norm="ortho").T)
+    original_basis_mat = np.conj(ifft(original_basis_mat, axis=0, norm="ortho").T)
+    return original_basis_mat

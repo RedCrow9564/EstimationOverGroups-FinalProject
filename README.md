@@ -3,7 +3,7 @@
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](????) [![MIT License](https://img.shields.io/apm/l/atomic-design-ui.svg?)](https://github.com/tterb/atomic-design-ui/blob/master/LICENSEs)![Run Unit-Tests](https://github.com/RedCrow9564/EstimationOverGroups-FinalProject/workflows/Run%20Unit-Tests/badge.svg)![Compute Code Metrics](https://github.com/RedCrow9564/EstimationOverGroups-FinalProject/workflows/Compute%20Code%20Metrics/badge.svg)![GitHub last commit](https://img.shields.io/github/last-commit/RedCrow9564/EstimationOverGroups-FinalProject)
 
 This is a project submitted as a requirement for this course. [The course](https://www30.tau.ac.il/yedion/syllabus.asp?course=0372401301) was administered in Spring 2020 in [Tel-Aviv University - School of Mathematical Sciences](https://en-exact-sciences.tau.ac.il/math), and taught by [Dr. Nir Sharon](https://en-exact-sciences.tau.ac.il/profile/nsharon). 
-This project is a reconstruction of experiments of [[1]](#1) for an algorithm for the Multi-Reference Factor Analysis problem. A complete documentation of the code is available [here](????)(open it in a web browser).
+This project is a reconstruction of experiments of [[1]](#1) for an algorithm for the Multi-Reference Factor Analysis problem.
 
 ## Getting Started
 
@@ -26,13 +26,14 @@ The Unit-Test files are:
 * [test_diagonal_extraction_and_construction.py](UnitTests/test_diagonal_extraction_and_construction.py) - Tests for components of the first stage of the algorithm: diagonals estimation and estimator construction.
 * [test_phase_retrieval_actions.py](UnitTests/test_phase_retrieval_actions.py) - Tests for components of the second stage of the algorithm: coefficients matrix construction and Fourier basis transition.
 * [test_tri_spectrum_estimation.py](UnitTests/test_tri_spectrum_estimation.py) - Tests for the tri-spectrum's estimation methods.
+* [test_optimization_step.py](UnitTests/test_optimization_step.py) - Tests for the objective function for both the real case and the complex case.
 
 Running any of these tests can be performed by:
 ```
 <python_path> -m unittest <test_file_path>
 ```
 ## Acknowledgments
-Credits for the original algorithms, paper and results of [[1]](#1) belong to its respectful authors: [Prof. Yoel Shkolnisky](https://en-exact-sciences.tau.ac.il/profile/yoelsh) and Dr. Boris Landa.
+Credits for the original algorithms, paper and results of [[1]](#1) belong to its respectful authors: [Prof. Yoel Shkolnisky](https://en-exact-sciences.tau.ac.il/profile/yoelsh) and Boris Landa.
 
 ## License
 

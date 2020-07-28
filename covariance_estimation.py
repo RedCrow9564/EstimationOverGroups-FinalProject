@@ -1,11 +1,11 @@
 import numpy as np
-from numpy.fft import ifft, fft
 from scipy.linalg import eigh, block_diag, circulant
 import cvxpy as cp
 import warnings
 from Infrastructure.utils import Union, Vector, Matrix, ThreeDMatrix, Callable
 from polyspectra_estimation import estimate_power_spectrum, estimate_tri_spectrum_v2
-from vectorized_actions import extract_diagonals, construct_estimator, vectorized_kron
+from vectorized_actions import extract_diagonals, construct_estimator, vectorized_kron, change_to_fourier_basis, \
+    change_from_fourier_basis
 
 
 def low_rank_multi_reference_factor_analysis(
@@ -29,8 +29,8 @@ def low_rank_multi_reference_factor_analysis(
 
     """
     # TODO: Remove the exact_covariance argument for real experiments.
-    estimator: Matrix = estimate_covariance_up_to_phases(observations_fourier, signal_length, noise_power, data_type,
-                                                         exact_covariance)
+    estimator = estimate_covariance_up_to_phases(observations_fourier, signal_length, noise_power, data_type,
+                                                 exact_covariance)
     estimator = phase_retrieval(estimator, signal_length, approximation_rank)
     return estimator
 
@@ -56,24 +56,25 @@ def estimate_covariance_up_to_phases(observations_fourier: Matrix, signal_length
     tri_spectrum: ThreeDMatrix = estimate_tri_spectrum_v2(observations_fourier)
 
     # TODO: Remove the exact_covariance argument
-    exact_cov_fourier_basis: Matrix = np.conj(fft(exact_covariance, axis=0, norm="ortho").T)
-    exact_cov_fourier_basis: Matrix = np.conj(fft(exact_cov_fourier_basis, axis=0, norm="ortho").T)
-    if np.any(np.abs(exact_covariance)) < 1e-15:
+    exact_cov_fourier_basis: Matrix = change_to_fourier_basis(exact_covariance)
+    if np.any(np.abs(exact_cov_fourier_basis)) < 1e-15:
         warnings.warn("The covariance matrix in Fourier basis has some 0 entries, consistency is NOT guaranteed!",
                       Warning)
-    print(f'Covariance Fourier Diagonal: {np.real(np.diag(exact_cov_fourier_basis))}')
-    print(f'Power spectrum: {power_spectrum}')
+    # print(f'Covariance Fourier Diagonal: {np.real(np.diag(exact_cov_fourier_basis))}')
+    # print(f'Power spectrum: {power_spectrum}')
     # exact_tri_spectrum: ThreeDMatrix = calc_exact_tri_spectrum(exact_cov_fourier_basis)
     # print(f'Max tri-spectrum estimation error: {np.max(np.abs(exact_tri_spectrum - tri_spectrum))}')
 
     # Optimization step
     g = perform_optimization(tri_spectrum, power_spectrum, signal_length, data_type)
+
     diagonals: Matrix = extract_diagonals(g, signal_length)
     estimated_covariance: Matrix = construct_estimator(diagonals, power_spectrum, signal_length, noise_power)
     return estimated_covariance
 
 
-def create_optimization_objective(tri_spectrum, power_spectrum, data_type) -> Callable:
+def create_optimization_objective(tri_spectrum: ThreeDMatrix, power_spectrum: Vector, data_type,
+                                  use_cp: bool = True) -> Callable:
     g_zero = np.outer(power_spectrum, power_spectrum)
     signal_length = len(power_spectrum)
 
@@ -103,7 +104,10 @@ def create_optimization_objective(tri_spectrum, power_spectrum, data_type) -> Ca
                             current_term -= matrices_list[next_index - 1][
                                 - k2 % signal_length, (-k2 - m) % signal_length]
 
-                    fit_score += cp.abs(current_term) ** 2
+                    if use_cp:
+                        fit_score += cp.abs(current_term) ** 2
+                    else:
+                        fit_score += np.abs(current_term) ** 2
         return fit_score
     return objective
 
@@ -115,15 +119,16 @@ def perform_optimization(tri_spectrum: ThreeDMatrix, power_spectrum: Matrix, sig
                          for i in range(signal_length - 1)]
     problem = cp.Problem(cp.Minimize(optimization_objective(symbolic_matrices)), [])
 
-    # print(f'Solvers: {cp.installed_solvers()}')
+    #  print(f'Solvers: {cp.installed_solvers()}')
     # print(f'Is convex? {problem.is_dcp()}')
-    min_fit_score = problem.solve()
+    min_fit_score = problem.solve(solver=cp.CVXOPT)
     optimization_result = [mat.value for mat in symbolic_matrices]
 
-    print(f'Min score: {min_fit_score}')
-    print(f'Are matrices None? {[(mat is None) for mat in optimization_result]}')
-    print(f'Are matrices Hermitian? {[np.allclose(np.conj(mat), mat) for mat in optimization_result]}')
-    print(f'Are matrices PSD? {[np.all(np.linalg.eigvalsh(mat) >= 0) for mat in optimization_result]}')
+    print(f'Min fit score: {min_fit_score}')
+    print(f'Problem status: {problem.status}')
+    # print(f'Are matrices None? {[(mat is None) for mat in optimization_result]}')
+    # print(f'Are matrices Hermitian? {[np.allclose(np.conj(mat), mat) for mat in optimization_result]}')
+    # print(f'Are matrices PSD? {[np.all(np.linalg.eigvalsh(mat) >= 0) for mat in optimization_result]}')
 
     return np.array(optimization_result, order='F')
 
@@ -148,13 +153,13 @@ def phase_retrieval(covariance_estimator: Matrix, signal_length: int, approximat
     matrix_a: Matrix = coefficient_matrix_construction(covariance_estimator, signal_length, approximation_rank)
     # Finding the singular vector which corresponds to the smallest singular-value of A.
     b = np.dot(np.conj(matrix_a).T, matrix_a)
-    val, v = eigh(b, overwrite_a=False, overwrite_b=False, check_finite=False, eigvals=(0, 2))
+    val, v = eigh(b, overwrite_a=False, overwrite_b=True, check_finite=False, eigvals=(0, 2))
     if abs(val[1]) < 1e-15:
         warnings.warn("The dimension of the null-space of A is larger the one, so this estimator " +
                       "is NOT guaranteed to succeed!", Warning)
 
     # Finding the matching angles
-    angles = estimate_angles(v, signal_length)
+    angles = estimate_angles(v[:, 0], signal_length)
     phases: Vector = np.exp(-1j * angles)
     phases = np.insert(phases, 0, 1)
 
@@ -162,8 +167,7 @@ def phase_retrieval(covariance_estimator: Matrix, signal_length: int, approximat
     covariance_estimator = np.multiply(covariance_estimator, circulant(phases))
 
     # Converting the estimator back to the standard basis
-    covariance_estimator = np.conj(ifft(covariance_estimator, axis=0, norm="ortho").T)
-    covariance_estimator = np.conj(ifft(covariance_estimator, axis=0, norm="ortho").T)
+    covariance_estimator = change_from_fourier_basis(covariance_estimator)
     return covariance_estimator
 
 
@@ -231,7 +235,7 @@ def estimate_angles(eigenvector: Vector, signal_length: int) -> Vector:
         A vector of estimated phases.
 
     """
-    v = eigenvector[:, 0][:signal_length]
+    v = eigenvector[:signal_length]
     arguments_vector = np.angle(v)
     angles = np.cumsum(arguments_vector[1:])
     angles = -angles + (angles[signal_length - 2] + arguments_vector[0]) / signal_length * \

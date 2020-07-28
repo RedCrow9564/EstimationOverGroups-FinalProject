@@ -10,11 +10,10 @@ constructing the coefficients matrix and the Fourier basis transition of the fix
 import unittest
 import numpy as np
 from numpy.random import Generator, PCG64
-from numpy.fft import ifft, fft
 from scipy.linalg import dft, eigh, block_diag, circulant
 from Infrastructure.utils import Matrix, Union
 from covariance_estimation import coefficient_matrix_construction
-from vectorized_actions import vectorized_kron
+from vectorized_actions import vectorized_kron, change_to_fourier_basis, change_from_fourier_basis
 
 
 class TestPhaseRetrievalActions(unittest.TestCase):
@@ -32,15 +31,13 @@ class TestPhaseRetrievalActions(unittest.TestCase):
         rng = Generator(PCG64(1995))
         n: int = rng.integers(low=2, high=100)
         mat: Matrix = rng.standard_normal((n, n))
-        tested_output = np.conj(ifft(mat, axis=0, norm="ortho").T)
-        tested_output = np.conj(ifft(tested_output, axis=0, norm="ortho").T)
+        tested_output = change_from_fourier_basis(mat)
         dft_mat: Matrix = dft(n, scale="sqrtn")
         expected_output: Matrix = np.conj(dft_mat.T).dot(mat).dot(dft_mat)
         self.assertTrue(np.allclose(tested_output, expected_output))
 
         mat: Matrix = rng.standard_normal((n, n))
-        mat_fourier: Matrix = np.conj(fft(mat, axis=0, norm="ortho").T)
-        mat_fourier: Matrix = np.conj(fft(mat_fourier, axis=0, norm="ortho").T)
+        mat_fourier: Matrix = change_to_fourier_basis(mat)
         expected_output: Matrix = dft_mat.dot(mat).dot(np.conj(dft_mat.T))
         self.assertTrue(np.allclose(mat_fourier, expected_output))
 

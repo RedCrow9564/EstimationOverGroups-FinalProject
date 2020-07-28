@@ -28,7 +28,7 @@ def calc_estimation_error(exact_covariance, estimated_covariance):
     rotated_cov: Matrix = exact_covariance
     error: Scalar = norm(estimated_covariance - rotated_cov, ord='fro') ** 2
 
-    for _ in range(exact_covariance.shape[0]):
+    for _ in range(exact_covariance.shape[0] - 1):
         rotated_cov = roll(rotated_cov, shift=[1, 1], axis=[0, 1])
         shifted_error = norm(estimated_covariance - rotated_cov, ord='fro') ** 2
         if shifted_error < error:
@@ -47,7 +47,7 @@ def config():
 
     data_type = np.complex128
     signal_lengths: [int] = [5]
-    observations_numbers: List[int] = [int(1e+5)]
+    observations_numbers: List[int] = [100, 1000, 10000]
     approximation_ranks: List[Union[int, None]] = [2]
     noise_powers: List[float] = [0.0]
     trials_num: int = 1
@@ -80,6 +80,7 @@ def main(signal_lengths: List[int], observations_numbers: List[int], approximati
         shifts_distribution: Vector = create_discrete_distribution(shifts_distribution_type, signal_length,
                                                                    distribution_params)
         mean_error: float = 0
+        max_error: float = 0.0
         trials_seeds: Vector = np.arange(first_seed, first_seed + trials_num).tolist()
 
         for trial_seed in trials_seeds:
@@ -94,7 +95,9 @@ def main(signal_lengths: List[int], observations_numbers: List[int], approximati
             # TODO: Remove the exact_covariance argument for real experiments.
             estimated_covariance: Matrix = low_rank_multi_reference_factor_analysis(
                 observations_fourier, signal_length, approximation_rank, noise_power, data_type, exact_covariance)
-            mean_error += calc_estimation_error(exact_covariance, estimated_covariance)
+            current_error: float = calc_estimation_error(exact_covariance, estimated_covariance)
+            mean_error += current_error
+            max_error = max(max_error, current_error)
 
         mean_error /= trials_num
         print(f'Finished experiment of signal length L={signal_length}, n={observations_num}, '
@@ -109,5 +112,6 @@ def main(signal_lengths: List[int], observations_numbers: List[int], approximati
         results_log.append(LogFields.TrialsNum, trials_num)
         results_log.append(LogFields.ShiftsDistribution, shifts_distribution_type)
         results_log.append(LogFields.MeanError, mean_error)
+        results_log.append(LogFields.MaxError, max_error)
 
     results_log.save_log(f'{experiment_name} results', results_folder_path=results_path)

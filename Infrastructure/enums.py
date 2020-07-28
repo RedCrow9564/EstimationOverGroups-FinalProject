@@ -41,6 +41,7 @@ class LogFields(BaseEnum):
     TrialsNum: str = "Number of Trials"
     ShiftsDistribution: str = "Shifts Distribution"
     MeanError: str = "Mean Error"
+    MaxError: str = "Max Error"
 
 
 class DistributionType(BaseEnum):
