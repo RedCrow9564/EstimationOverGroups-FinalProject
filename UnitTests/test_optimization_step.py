@@ -56,7 +56,6 @@ class TestOptimization(unittest.TestCase):
     """
     A class which contains tests for the optimization step of Algorithm 1.
     """
-    @unittest.skip
     def test_optimization_complex_case(self):
         """
         Test the optimization objective function for the complex case.
@@ -81,7 +80,6 @@ class TestOptimization(unittest.TestCase):
         self.assertEqual(min_expected_value, 0,
                          msg=f'Tri-spectrum and power-spectrum estimation error={min_expected_value}')
 
-    @unittest.skip
     def test_optimization_real_case(self):
         """
         Test the optimization objective function for the real case.
