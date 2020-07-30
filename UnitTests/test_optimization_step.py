@@ -15,8 +15,9 @@ from numpy.random import Generator, PCG64
 from Infrastructure.utils import Vector, Matrix, ThreeDMatrix
 from Infrastructure import pyximportcpp; pyximportcpp.install(setup_args={"include_dirs": np.get_include()},
                                                               reload_support=True)
-from covariance_estimation import create_optimization_objective
+from covariance_estimation import create_optimization_objective, perform_optimization
 from data_generation import generate_covariance
+from vectorized_actions import change_to_fourier_basis
 from UnitTests.test_tri_spectrum_estimation import calc_exact_tri_spectrum
 
 
@@ -41,8 +42,7 @@ def find_diagonals(exact_covariance: Matrix) -> Matrix:
 def _test_optimization_template(data_type, signal_length, approximation_rank, seed):
     rng = Generator(PCG64(seed))
     exact_covariance, eigenvectors, eigenvalues = generate_covariance(signal_length, approximation_rank, data_type, rng)
-    exact_cov_fourier_basis: Matrix = np.conj(np.fft.fft(exact_covariance, axis=0, norm="ortho").T)
-    exact_cov_fourier_basis: Matrix = np.conj(np.fft.fft(exact_cov_fourier_basis, axis=0, norm="ortho").T)
+    exact_cov_fourier_basis: Matrix = change_to_fourier_basis(exact_covariance)
     exact_power_spectrum: Vector = np.real(np.diag(exact_cov_fourier_basis))
     exact_tri_spectrum: ThreeDMatrix = calc_exact_tri_spectrum(exact_cov_fourier_basis, data_type)
     diagonals = find_diagonals(exact_cov_fourier_basis)
@@ -103,6 +103,13 @@ class TestOptimization(unittest.TestCase):
         self.assertEqual(min_expected_value, 0, msg=f'Tri-spectrum and power-spectrum estimation error={min_value}')
 
     def test_estimator_reconstruction(self):
+        """
+        Test the output of the optimization step
+
+        This test estimates the matrices Gk (assuming no noise) and creates the estimator Cx.
+        This test verifies Cx is a circulant matrix, and that its first column is a vector of elements
+        in the complex unit circle (i.e complex numbers with magnitude 1).
+        """
         seed: int = 1995
         data_type = np.float64
         tol = 1e-12
@@ -125,6 +132,36 @@ class TestOptimization(unittest.TestCase):
                         msg=f'The phases matrix is NOT circulant='
                             f'{np.max(np.abs(possible_circulant_mat - circulant_coefficient))}')
         self.assertTrue(np.allclose(np.abs(circulant_coefficient[:, 0]), np.ones(signal_length), atol=tol, rtol=0))
+
+    def test_optimization_exact_input(self):
+        """
+        Test the optimization step accuracy.
+
+        This test creates the exact input power-spectrum and tri-spectrum and then performs
+        the optimization step of the algorithm. Since the optimizer is far from perfect, the error
+        is about 0.003, instead of the expected perfect-fit score 0. This test is performed for both
+        real data and complex data.
+        """
+        seed: int = 1995
+        optimization_error_lower_bound: float = 1e-3
+        optimization_error_upper_bound: float = 1e-2
+        signal_length: int = 5
+        approximation_rank: int = 2
+        rng = Generator(PCG64(seed))
+
+        for data_type in [np.complex128, np.float64]:
+            exact_cov: Matrix = generate_covariance(signal_length, approximation_rank, data_type, rng)[0]
+            exact_cov_fourier_basis: Matrix = change_to_fourier_basis(exact_cov)
+            exact_power_spectrum: Vector = np.real(np.diag(exact_cov_fourier_basis))
+            exact_tri_spectrum: ThreeDMatrix = calc_exact_tri_spectrum(exact_cov_fourier_basis, data_type)
+
+            _, min_fit_score = perform_optimization(exact_tri_spectrum, exact_power_spectrum, signal_length, data_type)
+            self.assertGreater(min_fit_score, optimization_error_lower_bound)
+            print(f'Optimization error for exact data of type {data_type} is larger than '
+                  f'{optimization_error_lower_bound}')
+            self.assertLess(min_fit_score, optimization_error_upper_bound)
+            print(f'Optimization error for exact data of type {data_type} is smaller than '
+                  f'{optimization_error_upper_bound}')
 
 
 def construct_estimator(diagonals, power_spectrum, signal_length, noise_power) -> Matrix:

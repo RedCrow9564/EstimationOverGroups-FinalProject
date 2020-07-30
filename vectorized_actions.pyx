@@ -116,6 +116,15 @@ def construct_estimator(double_or_complex[::1, :] diagonals, const double[::1] p
 
 
 def change_to_fourier_basis(double_or_complex[:, ::1] mat) -> Matrix:
+    """
+    The function accepts a square matrix and transfers it to the Fourier basis.
+
+    Args:
+        mat(Matrix): A 2D square matrix of either float of complex numbers.
+
+    Returns:
+        A 2D array square matrix complex numbers of the same size.
+    """
     cdef np.ndarray[complex, ndim=2] fourier_basis_mat = np.empty_like(mat, dtype=np.complex128)
     fourier_basis_mat = np.conj(fft(mat, axis=0, norm="ortho").T)
     fourier_basis_mat = np.conj(fft(fourier_basis_mat, axis=0, norm="ortho").T)
@@ -123,6 +132,15 @@ def change_to_fourier_basis(double_or_complex[:, ::1] mat) -> Matrix:
 
 
 def change_from_fourier_basis(double_or_complex[:, ::1] mat) -> Matrix:
+    """
+    The function accepts a square matrix and transfers it from the Fourier basis.
+
+    Args:
+        mat(Matrix): A 2D square matrix of either float of complex numbers.
+
+    Returns:
+        A 2D array square matrix complex numbers of the same size.
+    """
     cdef np.ndarray[complex, ndim=2] original_basis_mat = np.empty_like(mat, dtype=np.complex128)
     original_basis_mat = np.conj(ifft(mat, axis=0, norm="ortho").T)
     original_basis_mat = np.conj(ifft(original_basis_mat, axis=0, norm="ortho").T)

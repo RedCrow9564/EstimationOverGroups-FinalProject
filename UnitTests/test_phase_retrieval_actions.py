@@ -11,8 +11,10 @@ import unittest
 import numpy as np
 from numpy.random import Generator, PCG64
 from scipy.linalg import dft, eigh, block_diag, circulant
-from Infrastructure.utils import Matrix, Union
-from covariance_estimation import coefficient_matrix_construction
+from Infrastructure.utils import Union, Matrix
+from data_generation import generate_covariance
+from main import calc_estimation_error
+from covariance_estimation import coefficient_matrix_construction, phase_retrieval
 from vectorized_actions import vectorized_kron, change_to_fourier_basis, change_from_fourier_basis
 
 
@@ -60,6 +62,31 @@ class TestPhaseRetrievalActions(unittest.TestCase):
 
         other_mat: Matrix = matrix_construction_alternative(mat, signal_length=n, approximation_rank=r)
         self.assertTrue(np.allclose(coeff_mat, other_mat), msg=f'{np.max(np.abs(other_mat - coeff_mat))}')
+
+    def test_phase_retrieval_on_exact_data(self):
+        """
+        Test phase-retrieval performance on exact data.
+
+        This test performs the phase-retrieval on the exact covariance, up to some random integer shift.
+        The output estimated covariance should be equal to the exact covariance, up to some shift of both its axes,
+        i.e the estimation error should be very close to zero (about 10^-20).
+        This test is performed for both real and complex data.
+        """
+        rng = Generator(PCG64(1995))
+        signal_length: int = rng.integers(low=9, high=20)
+        approximation_rank: int = rng.integers(low=2, high=np.floor(np.sqrt(signal_length)))
+        tol: float = 1e-20
+
+        for data_type in [np.complex128, np.float64]:
+            exact_cov: Matrix = generate_covariance(signal_length, approximation_rank, data_type, rng)[0]
+            random_shift: int = rng.integers(low=0, high=signal_length)
+            rotated_cov: Matrix = np.roll(exact_cov, shift=[random_shift, random_shift], axis=[0, 1])
+            exact_cov_fourier_basis: Matrix = change_to_fourier_basis(rotated_cov)
+
+            estimated_cov: Matrix = phase_retrieval(exact_cov_fourier_basis, signal_length, approximation_rank)
+            estimation_error: float = calc_estimation_error(exact_cov, estimated_cov)
+
+            self.assertTrue(np.allclose(estimation_error, 0, atol=tol, rtol=0))
 
 
 def matrix_construction_alternative(covariance_estimator: Matrix, signal_length: int,

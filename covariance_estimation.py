@@ -4,13 +4,13 @@ import cvxpy as cp
 import warnings
 from Infrastructure.utils import Union, Vector, Matrix, ThreeDMatrix, Callable
 from polyspectra_estimation import estimate_power_spectrum, estimate_tri_spectrum_v2
-from vectorized_actions import extract_diagonals, construct_estimator, vectorized_kron, change_to_fourier_basis, \
+from vectorized_actions import extract_diagonals, construct_estimator, vectorized_kron, \
     change_from_fourier_basis
 
 
 def low_rank_multi_reference_factor_analysis(
         observations_fourier: Matrix, signal_length: int, approximation_rank: Union[int, None],
-        noise_power: float, data_type, exact_covariance) -> Matrix:
+        noise_power: float, data_type) -> Matrix:
     """
     The entire algorithm fot the covariance estimation. It consists of two stages, see Algorithm 1 and Algorithm 2 in
     the paper.
@@ -21,22 +21,18 @@ def low_rank_multi_reference_factor_analysis(
         approximation_rank(int): The rank of the approximated covariance matrix.
         noise_power(float): An estimator for the noise power in the sampled observations.
         data_type: Either np.float64 for real-data or np.complex128 for complex data.
-        exact_covariance(Matrix): The covariance which this algorithm estimated. It is used ONLY for
-            testing, debugging and verifying the technical conditions which are required for this algorithm.
 
     Returns:
         The estimated covariance matrix.
 
     """
-    # TODO: Remove the exact_covariance argument for real experiments.
-    estimator = estimate_covariance_up_to_phases(observations_fourier, signal_length, noise_power, data_type,
-                                                 exact_covariance)
+    estimator = estimate_covariance_up_to_phases(observations_fourier, signal_length, noise_power, data_type)
     estimator = phase_retrieval(estimator, signal_length, approximation_rank)
     return estimator
 
 
 def estimate_covariance_up_to_phases(observations_fourier: Matrix, signal_length: int, noise_power: float,
-                                     data_type, exact_covariance) -> Matrix:
+                                     data_type) -> Matrix:
     """
     The first stage algorithm fot the covariance estimation, see Algorithm 1 in the paper.
 
@@ -52,22 +48,14 @@ def estimate_covariance_up_to_phases(observations_fourier: Matrix, signal_length
         The estimated covariance matrix, up to multiplication by a circulant matrix of complex phases.
 
     """
+    print("Started covariance estimation up to phase ambiguity (Algorithm 1)")
     power_spectrum: Vector = estimate_power_spectrum(observations_fourier)
     tri_spectrum: ThreeDMatrix = estimate_tri_spectrum_v2(observations_fourier)
 
-    # TODO: Remove the exact_covariance argument
-    exact_cov_fourier_basis: Matrix = change_to_fourier_basis(exact_covariance)
-    if np.any(np.abs(exact_cov_fourier_basis)) < 1e-15:
-        warnings.warn("The covariance matrix in Fourier basis has some 0 entries, consistency is NOT guaranteed!",
-                      Warning)
-    # print(f'Covariance Fourier Diagonal: {np.real(np.diag(exact_cov_fourier_basis))}')
-    # print(f'Power spectrum: {power_spectrum}')
-    # exact_tri_spectrum: ThreeDMatrix = calc_exact_tri_spectrum(exact_cov_fourier_basis)
-    # print(f'Max tri-spectrum estimation error: {np.max(np.abs(exact_tri_spectrum - tri_spectrum))}')
-
     # Optimization step
-    g = perform_optimization(tri_spectrum, power_spectrum, signal_length, data_type)
+    g, _ = perform_optimization(tri_spectrum, power_spectrum, signal_length, data_type)
 
+    # Construct the estimator Cx.
     diagonals: Matrix = extract_diagonals(g, signal_length)
     estimated_covariance: Matrix = construct_estimator(diagonals, power_spectrum, signal_length, noise_power)
     return estimated_covariance
@@ -75,6 +63,22 @@ def estimate_covariance_up_to_phases(observations_fourier: Matrix, signal_length
 
 def create_optimization_objective(tri_spectrum: ThreeDMatrix, power_spectrum: Vector, data_type,
                                   use_cp: bool = True) -> Callable:
+    """
+    The function creates the optimization objective function, using the estimations of the tri-spectrum,
+    and the power-spectrum. The objective function depends on whether the data is sampled for real distributions
+    or complex distributions.
+
+    Args:
+        tri_spectrum(ThreeDMatrix): An estimation of the signal's tri-spectrum.
+        power_spectrum(Matrix): An estimation of the signal's power-spectrum.
+        data_type: Either np.float64 for real-data or np.complex128 for complex data.
+        use_cp(bool): A flag which indicates if the returned output of the objective should be symbolic
+            (used for the CVXPY optimization) or numeric (used for unit-testing).
+
+    Returns:
+        A list of matrices which minimize the optimization objective and the minimal fit error.
+
+    """
     g_zero = np.outer(power_spectrum, power_spectrum)
     signal_length = len(power_spectrum)
 
@@ -113,24 +117,32 @@ def create_optimization_objective(tri_spectrum: ThreeDMatrix, power_spectrum: Ve
 
 
 def perform_optimization(tri_spectrum: ThreeDMatrix, power_spectrum: Matrix, signal_length: int,
-                         data_type) -> ThreeDMatrix:
+                         data_type) -> (ThreeDMatrix, float):
+    """
+    The optimization step of Algorithm 1 of the paper. This step utilizes the CVXPY library
+    to fit (L - 1) matrices of size L x L which are all hermitian and PSD. This function returns
+    the fitted matrices and the minimal error.
+
+    Args:
+        tri_spectrum(ThreeDMatrix): An estimation of the signal's tri-spectrum.
+        power_spectrum(Matrix): An estimation of the signal's power-spectrum.
+        signal_length(int): The length of the signal.
+        data_type: Either np.float64 for real-data or np.complex128 for complex data.
+
+    Returns:
+        A list of matrices which minimize the optimization objective and the minimal fit error.
+
+    """
     optimization_objective: Callable = create_optimization_objective(tri_spectrum, power_spectrum, data_type)
     symbolic_matrices = [cp.Variable((signal_length, signal_length), PSD=True, name=f'G{i + 1}')
                          for i in range(signal_length - 1)]
     problem = cp.Problem(cp.Minimize(optimization_objective(symbolic_matrices)), [])
 
-    #  print(f'Solvers: {cp.installed_solvers()}')
-    # print(f'Is convex? {problem.is_dcp()}')
-    min_fit_score = problem.solve(solver=cp.CVXOPT)
+    # Solving the convex optimization problem and gathering the fitted matrices.
+    min_fit_score = problem.solve(solver=cp.CVXOPT, abstol=1e-9, reltol=1e-9)
     optimization_result = [mat.value for mat in symbolic_matrices]
 
-    print(f'Min fit score: {min_fit_score}')
-    print(f'Problem status: {problem.status}')
-    # print(f'Are matrices None? {[(mat is None) for mat in optimization_result]}')
-    # print(f'Are matrices Hermitian? {[np.allclose(np.conj(mat), mat) for mat in optimization_result]}')
-    # print(f'Are matrices PSD? {[np.all(np.linalg.eigvalsh(mat) >= 0) for mat in optimization_result]}')
-
-    return np.array(optimization_result, order='F')
+    return np.array(optimization_result, order='F'), min_fit_score
 
 
 def phase_retrieval(covariance_estimator: Matrix, signal_length: int, approximation_rank: Union[int, None]) -> Matrix:
@@ -149,6 +161,7 @@ def phase_retrieval(covariance_estimator: Matrix, signal_length: int, approximat
 
     """
 
+    print("Started phase-retrieval step (Algorithm 2)")
     # Building the coefficients matrix A.
     matrix_a: Matrix = coefficient_matrix_construction(covariance_estimator, signal_length, approximation_rank)
     # Finding the singular vector which corresponds to the smallest singular-value of A.

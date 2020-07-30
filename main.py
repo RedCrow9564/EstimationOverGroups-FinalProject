@@ -20,6 +20,7 @@ from Infrastructure.utils import ex, DataLog, Dict, Union, List, Scalar, Vector,
 from Infrastructure.enums import LogFields, DistributionType, DistributionParams
 from data_generation import create_discrete_distribution, generate_covariance, generate_observations, \
     generate_shifts_and_noise
+from vectorized_actions import change_to_fourier_basis
 from covariance_estimation import low_rank_multi_reference_factor_analysis
 
 
@@ -47,7 +48,7 @@ def config():
 
     data_type = np.complex128
     signal_lengths: [int] = [5]
-    observations_numbers: List[int] = [100, 1000, 10000]
+    observations_numbers: List[int] = [100000]
     approximation_ranks: List[Union[int, None]] = [2]
     noise_powers: List[float] = [0.0]
     trials_num: int = 1
@@ -83,7 +84,8 @@ def main(signal_lengths: List[int], observations_numbers: List[int], approximati
         max_error: float = 0.0
         trials_seeds: Vector = np.arange(first_seed, first_seed + trials_num).tolist()
 
-        for trial_seed in trials_seeds:
+        for trial_index, trial_seed in enumerate(trials_seeds):
+            print(f'Started trial no. {trial_index}')
             rng = Generator(PCG64(trial_seed))  # Set trial's random generator.
             exact_covariance, eigenvectors, eigenvalues = generate_covariance(signal_length, approximation_rank,
                                                                               data_type, rng)
@@ -92,9 +94,14 @@ def main(signal_lengths: List[int], observations_numbers: List[int], approximati
             observations_shifts: List[int] = rng.choice(signal_length, size=observations_num, p=shifts_distribution)
             observations = generate_shifts_and_noise(observations, observations_shifts, noise_power, data_type, rng)
             observations_fourier: Matrix = fft(observations, norm="ortho", axis=1)
-            # TODO: Remove the exact_covariance argument for real experiments.
+
+            exact_cov_fourier_basis: Matrix = change_to_fourier_basis(exact_covariance)
+            if np.any(np.abs(exact_cov_fourier_basis)) < 1e-15:
+                warnings.warn("The covariance matrix in Fourier basis has some 0 entries, " +
+                              "consistency is NOT guaranteed!", Warning)
+
             estimated_covariance: Matrix = low_rank_multi_reference_factor_analysis(
-                observations_fourier, signal_length, approximation_rank, noise_power, data_type, exact_covariance)
+                observations_fourier, signal_length, approximation_rank, noise_power, data_type)
             current_error: float = calc_estimation_error(exact_covariance, estimated_covariance)
             mean_error += current_error
             max_error = max(max_error, current_error)
