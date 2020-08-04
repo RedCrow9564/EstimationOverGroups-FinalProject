@@ -7,17 +7,14 @@ This module contains the tests for the optimization step in Algorithm 1
 in the paper.
 """
 import unittest
-from typing import Callable
 import numpy as np
-from scipy.linalg import eigh
 from scipy.linalg import circulant
 from numpy.random import Generator, PCG64
 from Infrastructure.utils import Vector, Matrix, ThreeDMatrix
-from Infrastructure import pyximportcpp; pyximportcpp.install(setup_args={"include_dirs": np.get_include()},
-                                                              reload_support=True)
+from Infrastructure import pyximportcpp; pyximportcpp.install(setup_args={"include_dirs": np.get_include()}, reload_support=True)
 from covariance_estimation import create_optimization_objective, perform_optimization
 from data_generation import generate_covariance
-from vectorized_actions import change_to_fourier_basis
+from vectorized_actions import change_to_fourier_basis, construct_estimator, extract_diagonals
 from UnitTests.test_tri_spectrum_estimation import calc_exact_tri_spectrum
 
 
@@ -47,8 +44,9 @@ def _test_optimization_template(data_type, signal_length, approximation_rank, se
     exact_tri_spectrum: ThreeDMatrix = calc_exact_tri_spectrum(exact_cov_fourier_basis, data_type)
     diagonals = find_diagonals(exact_cov_fourier_basis)
     g_mats = np.array([diagonal.reshape(-1, 1).dot(np.conj(diagonal.reshape(-1, 1).T)) for diagonal in diagonals])
-    optimization_object: Callable = create_optimization_objective(exact_tri_spectrum, exact_power_spectrum,
-                                                                  data_type, use_cp=False)
+    g_mats = np.vstack((np.outer(exact_power_spectrum, exact_power_spectrum).reshape(1, 3, 3), g_mats))
+    optimization_object, _, _ = create_optimization_objective(exact_tri_spectrum, exact_power_spectrum,
+                                                              data_type, use_cp=False)
     return optimization_object(g_mats), exact_tri_spectrum, exact_power_spectrum, g_mats, exact_cov_fourier_basis
 
 
@@ -117,7 +115,7 @@ class TestOptimization(unittest.TestCase):
         approximation_rank: int = 1
         _, _, exact_power_spectrum, g_mats, exact_cov_fourier = _test_optimization_template(
             data_type, signal_length, approximation_rank, seed)
-        g_mats = np.asfortranarray(g_mats)
+        g_mats = np.asfortranarray(g_mats[1:])
         exact_power_spectrum = np.ascontiguousarray(exact_power_spectrum)
 
         diagonals: Matrix = extract_diagonals(g_mats, signal_length)
@@ -138,13 +136,12 @@ class TestOptimization(unittest.TestCase):
         Test the optimization step accuracy.
 
         This test creates the exact input power-spectrum and tri-spectrum and then performs
-        the optimization step of the algorithm. Since the optimizer is far from perfect, the error
-        is about 0.003, instead of the expected perfect-fit score 0. This test is performed for both
+        the optimization step of the algorithm. Since the optimizer is not perfect, the error
+        is at most 5e-7, instead of the expected perfect-fit score 0. This test is performed for both
         real data and complex data.
         """
         seed: int = 1995
-        optimization_error_lower_bound: float = 1e-3
-        optimization_error_upper_bound: float = 1e-2
+        optimization_error_upper_bound: float = 5e-7
         signal_length: int = 5
         approximation_rank: int = 2
         rng = Generator(PCG64(seed))
@@ -152,59 +149,16 @@ class TestOptimization(unittest.TestCase):
         for data_type in [np.complex128, np.float64]:
             exact_cov: Matrix = generate_covariance(signal_length, approximation_rank, data_type, rng)[0]
             exact_cov_fourier_basis: Matrix = change_to_fourier_basis(exact_cov)
-            exact_power_spectrum: Vector = np.real(np.diag(exact_cov_fourier_basis))
+            exact_power_spectrum: Vector = np.ascontiguousarray(np.real(np.diag(exact_cov_fourier_basis)))
             exact_tri_spectrum: ThreeDMatrix = calc_exact_tri_spectrum(exact_cov_fourier_basis, data_type)
 
-            _, min_fit_score = perform_optimization(exact_tri_spectrum, exact_power_spectrum, signal_length, data_type)
-            self.assertGreater(min_fit_score, optimization_error_lower_bound)
-            print(f'Optimization error for exact data of type {data_type} is larger than '
-                  f'{optimization_error_lower_bound}')
+            g, min_fit_score = perform_optimization(exact_tri_spectrum, exact_power_spectrum, signal_length, data_type)
+            min_fit_score = abs(min_fit_score)
             self.assertLess(min_fit_score, optimization_error_upper_bound)
             print(f'Optimization error for exact data of type {data_type} is smaller than '
                   f'{optimization_error_upper_bound}')
 
 
-def construct_estimator(diagonals, power_spectrum, signal_length, noise_power) -> Matrix:
-    estimator = np.empty((signal_length, signal_length), dtype=diagonals.dtype)
-
-    # Constructing the main diagonal of the estimator.
-    for i in range(signal_length):
-        estimator[i, i] = power_spectrum[i] - noise_power
-
-    # Constructing the off-diagonal terms.
-    for i in range(1, signal_length):
-        for j in range(signal_length):
-            column_index = (i + j) % signal_length
-            estimator[j, column_index] = diagonals[i - 1, j]
-
-    return estimator
-
-
-def extract_diagonals(matrices_arr, signal_length) -> Matrix:
-    """
-    The function calculates the eigenvector of each matrices_arr[i] which corresponds to the largest (in magnitude)
-    eigenvalue. This eigenvector is scaled by the square-root of the matching eigenvalue and stored as the i-th row
-    of the result matrix.
-
-    Args:
-        matrices_arr(ThreeDMatrix): The matrices list, where square matrices are stored along the first dimension of
-            the array, i.e matrices_arr[i] is the i-th square matrix in the array.
-        signal_length(const int): The length of each dimension of all square matrices.
-
-    Returns:
-        A square matrix such that its i-th row is the scaled leading eigenvector of matrices_arr[i].
-    """
-    diagonals = np.empty((signal_length - 1, signal_length), dtype=matrices_arr.dtype, order="F")
-
-    for i in range(signal_length - 1):
-        eigenvalue, eigenvector = eigh(
-            matrices_arr[i], overwrite_a=True, overwrite_b=True, check_finite=False,
-            eigvals=(signal_length - 1, signal_length - 1))
-        first_scaled_eigenvalue = np.sqrt(eigenvalue[0])
-        for j in range(signal_length):
-            diagonals[i, j] = first_scaled_eigenvalue * eigenvector[j, 0]
-
-    return diagonals
 
 
 if __name__ == '__main__':

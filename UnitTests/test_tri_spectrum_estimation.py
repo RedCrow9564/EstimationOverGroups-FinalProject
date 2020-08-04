@@ -13,6 +13,7 @@ from Infrastructure import pyximportcpp; pyximportcpp.install(setup_args={"inclu
                                                               reload_support=True)
 from polyspectra_estimation import estimate_tri_spectrum_naive, estimate_tri_spectrum_v2, estimate_power_spectrum
 from Infrastructure.utils import Vector, Matrix, ThreeDMatrix
+from vectorized_actions import change_to_fourier_basis
 from data_generation import generate_covariance, generate_observations
 
 
@@ -54,7 +55,7 @@ class TestTriSpectrumAlgorithms(unittest.TestCase):
 
         """
         rng = Generator(PCG64(596))
-        signal_length: int = rng.integers(low=10, high=40)
+        signal_length: int = rng.integers(low=10, high=20)
         observations_num: int = rng.integers(low=10000, high=50000)
         approximation_rank: int = rng.integers(low=2, high=signal_length)
         data_type = np.complex128
@@ -63,17 +64,20 @@ class TestTriSpectrumAlgorithms(unittest.TestCase):
                                                                           rng)
         observations = generate_observations(eigenvectors, eigenvalues, approximation_rank, observations_num,
                                              data_type, rng)
-        observations_fourier: Matrix = np.fft.fft(observations, norm="ortho")
-        exact_cov_fourier_basis: Matrix = np.conj(np.fft.fft(exact_covariance, axis=0, norm="ortho").T)
-        exact_cov_fourier_basis: Matrix = np.conj(np.fft.fft(exact_cov_fourier_basis, axis=0, norm="ortho").T)
+        observations_fourier: Matrix = np.fft.fft(observations, norm="ortho", axis=1)
+        exact_cov_fourier_basis: Matrix = change_to_fourier_basis(exact_covariance)
         exact_diagonal: Vector = np.real(np.diag(exact_cov_fourier_basis))
         power_spectrum_estimation: Vector = estimate_power_spectrum(observations_fourier)
         exact_tri_spectrum: ThreeDMatrix = calc_exact_tri_spectrum(exact_cov_fourier_basis, data_type)
         estimate_tri_spectrum: ThreeDMatrix = estimate_tri_spectrum_v2(observations_fourier)
 
+        print(f'Observations number: {observations_num}')
+        print(f'Complex Tri-spectrum estimation error: {np.max(np.abs(estimate_tri_spectrum - exact_tri_spectrum))}')
+
         # Validate both tri-spectrum and power-spectrum estimations are consistent.
         self.assertTrue(np.allclose(exact_diagonal, power_spectrum_estimation, atol=tol, rtol=0),
-                        msg=f'Power-spectrum estimation is inconsistent!')
+                        msg=f'Power-spectrum estimation is inconsistent!, error=' +
+                            f'{np.max(np.abs(power_spectrum_estimation - exact_diagonal))}')
         self.assertTrue(np.allclose(estimate_tri_spectrum, exact_tri_spectrum, atol=tol, rtol=0),
                         msg=f'Tri-spectrum estimation is inconsistent!, error=' +
                             f'{np.max(np.abs(estimate_tri_spectrum - exact_tri_spectrum))}')
@@ -88,8 +92,8 @@ class TestTriSpectrumAlgorithms(unittest.TestCase):
 
         """
         rng = Generator(PCG64(596))
-        signal_length: int = rng.integers(low=10, high=40)
-        observations_num: int = rng.integers(low=10000, high=50000)
+        signal_length: int = rng.integers(low=10, high=20)
+        observations_num: int = rng.integers(low=10000, high=40000)
         approximation_rank: int = rng.integers(low=2, high=signal_length)
         data_type = np.float64
         tol = 1e-3
@@ -98,10 +102,12 @@ class TestTriSpectrumAlgorithms(unittest.TestCase):
         observations = generate_observations(eigenvectors, eigenvalues, approximation_rank, observations_num,
                                              data_type, rng)
         observations_fourier: Matrix = np.fft.fft(observations, norm="ortho")
-        exact_cov_fourier_basis: Matrix = np.conj(np.fft.fft(exact_covariance, axis=0, norm="ortho").T)
-        exact_cov_fourier_basis: Matrix = np.conj(np.fft.fft(exact_cov_fourier_basis, axis=0, norm="ortho").T)
+        exact_cov_fourier_basis: Matrix = change_to_fourier_basis(exact_covariance)
         exact_tri_spectrum: ThreeDMatrix = calc_exact_tri_spectrum(exact_cov_fourier_basis, data_type)
         estimate_tri_spectrum: ThreeDMatrix = estimate_tri_spectrum_v2(observations_fourier)
+        
+        print(f'Observations number: {observations_num}')
+        print(f'Real Tri-spectrum estimation error: {np.max(np.abs(estimate_tri_spectrum - exact_tri_spectrum))}')
 
         # Validate the tri-spectrum estimation in the real case is consistent.
         self.assertTrue(np.allclose(estimate_tri_spectrum, exact_tri_spectrum, atol=tol, rtol=0),
@@ -113,7 +119,7 @@ def calc_exact_tri_spectrum(exact_covariance: Matrix, data_type) -> ThreeDMatrix
     signal_length: int = exact_covariance.shape[0]
     tri_spectrum = np.empty((signal_length, signal_length, signal_length), dtype=exact_covariance.dtype)
 
-    for i, j, k in product(range(signal_length), range(signal_length), range(signal_length)):
+    for i, j, k in product(range(signal_length), repeat=3):
         fourth_index = (k - j + i) % signal_length
         tri_spectrum[i, j, k] = exact_covariance[i, j] * np.conj(exact_covariance[fourth_index, k])
         tri_spectrum[i, j, k] += exact_covariance[i, fourth_index] * np.conj(exact_covariance[j, k])

@@ -11,7 +11,7 @@ import unittest
 import numpy as np
 from numpy.random import Generator, PCG64
 from scipy.linalg import dft, eigh, block_diag, circulant
-from Infrastructure.utils import Union, Matrix
+from Infrastructure.utils import Union, Vector, Matrix
 from data_generation import generate_covariance
 from main import calc_estimation_error
 from covariance_estimation import coefficient_matrix_construction, phase_retrieval
@@ -52,10 +52,11 @@ class TestPhaseRetrievalActions(unittest.TestCase):
 
         """
         rng = Generator(PCG64(1995))
-        n: int = rng.integers(low=9, high=20)
-        r: int = rng.integers(low=2, high=np.floor(np.sqrt(n)))
-        mat: Matrix = rng.standard_normal((n, n))
-        mat = np.dot(mat, mat.T)
+        n: int = 5  # rng.integers(low=9, high=20)
+        r: int = 2  # rng.integers(low=2, high=np.floor(np.sqrt(n)))
+        mat: Matrix = generate_covariance(n, r, np.complex128, rng)[0]
+        mat = change_to_fourier_basis(mat)
+        
         coeff_mat: Matrix = coefficient_matrix_construction(mat, signal_length=n, approximation_rank=r)
         self.assertEqual(coeff_mat.shape[0], n ** 3)
         self.assertEqual(coeff_mat.shape[1], (1 + r ** 4) * n)
@@ -83,7 +84,9 @@ class TestPhaseRetrievalActions(unittest.TestCase):
             rotated_cov: Matrix = np.roll(exact_cov, shift=[random_shift, random_shift], axis=[0, 1])
             exact_cov_fourier_basis: Matrix = change_to_fourier_basis(rotated_cov)
 
-            estimated_cov: Matrix = phase_retrieval(exact_cov_fourier_basis, signal_length, approximation_rank)
+            random_phases: Vector = 1j * rng.standard_normal(signal_length - 1)
+            input_cov = np.multiply(exact_cov_fourier_basis, circulant([1] + np.exp(random_phases).tolist()))     
+            estimated_cov: Matrix = phase_retrieval(input_cov, signal_length, approximation_rank)
             estimation_error: float = calc_estimation_error(exact_cov, estimated_cov)
 
             self.assertTrue(np.allclose(estimation_error, 0, atol=tol, rtol=0))
@@ -98,7 +101,7 @@ def matrix_construction_alternative(covariance_estimator: Matrix, signal_length:
     last_index: int = signal_length ** 2
     all_eigenvectors: Matrix = np.empty((signal_length, signal_length, rank_sqr), order="F",
                                         dtype=covariance_estimator.dtype)
-    all_m_mats: Matrix = np.zeros((signal_length ** 3, signal_length), dtype=covariance_estimator.dtype)
+    all_m_mats: Matrix = np.empty((signal_length ** 3, signal_length), dtype=covariance_estimator.dtype)
 
     for i in range(signal_length):
         all_eigenvectors[i] = eigh(hi_i, overwrite_b=False, check_finite=False,

@@ -1,8 +1,9 @@
 import numpy as np
 from scipy.linalg import eigh, block_diag, circulant
 import cvxpy as cp
+from itertools import product
 import warnings
-from Infrastructure.utils import Union, Vector, Matrix, ThreeDMatrix, Callable
+from Infrastructure.utils import Union, List, Vector, Matrix, ThreeDMatrix, Callable
 from polyspectra_estimation import estimate_power_spectrum, estimate_tri_spectrum_v2
 from vectorized_actions import extract_diagonals, construct_estimator, vectorized_kron, \
     change_from_fourier_basis
@@ -62,7 +63,7 @@ def estimate_covariance_up_to_phases(observations_fourier: Matrix, signal_length
 
 
 def create_optimization_objective(tri_spectrum: ThreeDMatrix, power_spectrum: Vector, data_type,
-                                  use_cp: bool = True) -> Callable:
+                                  use_cp: bool = True) -> (Callable, List[Matrix], List):
     """
     The function creates the optimization objective function, using the estimations of the tri-spectrum,
     and the power-spectrum. The objective function depends on whether the data is sampled for real distributions
@@ -70,7 +71,7 @@ def create_optimization_objective(tri_spectrum: ThreeDMatrix, power_spectrum: Ve
 
     Args:
         tri_spectrum(ThreeDMatrix): An estimation of the signal's tri-spectrum.
-        power_spectrum(Matrix): An estimation of the signal's power-spectrum.
+        power_spectrum(Vector): An estimation of the signal's power-spectrum.
         data_type: Either np.float64 for real-data or np.complex128 for complex data.
         use_cp(bool): A flag which indicates if the returned output of the objective should be symbolic
             (used for the CVXPY optimization) or numeric (used for unit-testing).
@@ -79,41 +80,36 @@ def create_optimization_objective(tri_spectrum: ThreeDMatrix, power_spectrum: Ve
         A list of matrices which minimize the optimization objective and the minimal fit error.
 
     """
-    g_zero = np.outer(power_spectrum, power_spectrum)
-    signal_length = len(power_spectrum)
-
+    signal_length = tri_spectrum.shape[0]
+    symbolic_matrices = [cp.Variable((signal_length, signal_length), complex=True, name=f'G{i}')
+                         for i in range(signal_length)]
+    constraints = [G >> 0 for G in symbolic_matrices[1:]]
+    constraints.extend([symbolic_matrices[0] == np.outer(power_spectrum, power_spectrum)])
+    
+    
     def objective(matrices_list):
-        fit_score = 0.0
-        for k1 in range(signal_length):
-            for k2 in range(signal_length):
-                other_index = (k2 - k1) % signal_length
-                for m in range(signal_length):
-                    k1_plus_m = (k1 + m) % signal_length
-                    current_term = tri_spectrum[k1, k1_plus_m, (k2 + m) % signal_length]
-                    if other_index == 0:
-                        current_term -= g_zero[k1, k1_plus_m]
-                    else:
-                        current_term -= matrices_list[other_index - 1][k1, k1_plus_m]
+        error_terms: Vector = []
+        is_data_real: bool = data_type in [np.float32, np.float64]
+        for k1, k2, m in product(range(signal_length), repeat=3):
+            other_index = (k2 - k1) % signal_length
+            k1_plus_m = (k1 + m) % signal_length
+            current_term = tri_spectrum[k1, k1_plus_m, (k2 + m) % signal_length]
+            current_term -= matrices_list[other_index][k1, k1_plus_m]
+            current_term -= matrices_list[m][k1, k2]
 
-                    if m == 0:
-                        current_term -= g_zero[k1, k2]
-                    else:
-                        current_term -= matrices_list[m - 1][k1, k2]
+            if is_data_real:
+                next_index: int = (k1 + k2 + m) % signal_length
+                current_term -= matrices_list[next_index][
+                    - k2 % signal_length, (-k2 - m) % signal_length]
 
-                    if data_type in [np.float32, np.float64]:
-                        next_index: int = (k1 + k2 + m) % signal_length
-                        if next_index == 0:
-                            current_term -= g_zero[- k2 % signal_length, (-k2 - m) % signal_length]
-                        else:
-                            current_term -= matrices_list[next_index - 1][
-                                - k2 % signal_length, (-k2 - m) % signal_length]
+            error_terms.append(current_term)
 
-                    if use_cp:
-                        fit_score += cp.abs(current_term) ** 2
-                    else:
-                        fit_score += np.abs(current_term) ** 2
+        if use_cp:
+            fit_score = cp.sum([cp.abs(term) ** 2 for term in error_terms])
+        else:
+            fit_score = np.sum([np.abs(term) ** 2 for term in error_terms])
         return fit_score
-    return objective
+    return objective, symbolic_matrices, constraints
 
 
 def perform_optimization(tri_spectrum: ThreeDMatrix, power_spectrum: Matrix, signal_length: int,
@@ -133,14 +129,16 @@ def perform_optimization(tri_spectrum: ThreeDMatrix, power_spectrum: Matrix, sig
         A list of matrices which minimize the optimization objective and the minimal fit error.
 
     """
-    optimization_objective: Callable = create_optimization_objective(tri_spectrum, power_spectrum, data_type)
-    symbolic_matrices = [cp.Variable((signal_length, signal_length), PSD=True, name=f'G{i + 1}')
-                         for i in range(signal_length - 1)]
-    problem = cp.Problem(cp.Minimize(optimization_objective(symbolic_matrices)), [])
+    optimization_objective, symbolic_matrices, constraints = create_optimization_objective(
+        tri_spectrum, power_spectrum, data_type)
+
+    objective = optimization_objective(symbolic_matrices)
+    problem = cp.Problem(cp.Minimize(objective), constraints)
 
     # Solving the convex optimization problem and gathering the fitted matrices.
-    min_fit_score = problem.solve(solver=cp.CVXOPT, abstol=1e-9, reltol=1e-9)
-    optimization_result = [mat.value for mat in symbolic_matrices]
+    min_fit_score = problem.solve(solver=cp.SCS, eps=1e-25, warm_start=False)
+    optimization_result = [mat.value for mat in symbolic_matrices[1:]]
+    print(f'Min fit score: {min_fit_score}')
 
     return np.array(optimization_result, order='F'), min_fit_score
 
@@ -172,7 +170,8 @@ def phase_retrieval(covariance_estimator: Matrix, signal_length: int, approximat
                       "is NOT guaranteed to succeed!", Warning)
 
     # Finding the matching angles
-    angles = estimate_angles(v[:, 0], signal_length)
+    v = np.roll(v[:, 0][:signal_length], shift=1)
+    angles = estimate_angles(v, signal_length)
     phases: Vector = np.exp(-1j * angles)
     phases = np.insert(phases, 0, 1)
 
@@ -231,7 +230,7 @@ def coefficient_matrix_construction(covariance_estimator: Matrix, signal_length:
         rotated_mat = np.roll(rotated_mat, shift=1, axis=0)
         hi_i = np.multiply(covariance_estimator, np.conj(rotated_mat))
 
-    matrix_a = np.hstack((all_m_mats, -block_diag(*vectorized_kron(all_eigenvectors))))
+    matrix_a = np.hstack((all_m_mats, block_diag(*-vectorized_kron(all_eigenvectors))))
     return matrix_a
 
 
@@ -250,7 +249,9 @@ def estimate_angles(eigenvector: Vector, signal_length: int) -> Vector:
     """
     v = eigenvector[:signal_length]
     arguments_vector = np.angle(v)
-    angles = np.cumsum(arguments_vector[1:])
-    angles = -angles + (angles[signal_length - 2] + arguments_vector[0]) / signal_length * \
-        np.arange(1, signal_length, 1)
+    args_cumsum: Vector = np.cumsum(arguments_vector[1:])
+    total_sum: float = args_cumsum[signal_length - 2] + arguments_vector[0]
+    total_sum /= signal_length
+    angles = args_cumsum - total_sum * np.arange(1, signal_length)
     return angles
+        

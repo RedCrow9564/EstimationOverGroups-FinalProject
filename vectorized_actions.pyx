@@ -8,6 +8,7 @@ This module contains methods for are implemented in Cython for run-time improvem
 import numpy as np
 cimport numpy as np
 from numpy import kron
+from cython.parallel import prange
 from scipy.linalg import eigh
 from numpy.fft import fft, ifft
 from libc.math cimport sqrt
@@ -45,7 +46,7 @@ def extract_diagonals(double_or_complex[::1, :, :] matrices_arr, const int signa
             matrices_arr[i], overwrite_a=True, overwrite_b=True, check_finite=False,
             eigvals=(signal_length - 1, signal_length - 1))
         first_scaled_eigenvalue = sqrt(eigenvalue[0])
-        for j in range(signal_length):
+        for j in prange(signal_length, nogil=True):
             diagonals[i, j] = first_scaled_eigenvalue * eigenvector[j, 0]
 
     return diagonals
@@ -70,14 +71,9 @@ def vectorized_kron(double_or_complex[::1, :, :] matrices_arr) -> ThreeDMatrix:
                                                                   dtype=matrices_arr.base.dtype, order="F")
     cdef Py_ssize_t i = 0
 
-    if double_or_complex is complex:
-        for i in range(rows - 1):
-            results[i] = kron(np.conj(matrices_arr[i + 1]), matrices_arr[i])
-        results[rows - 1] = kron(np.conj(matrices_arr[0]), matrices_arr[rows - 1])
-    else:
-        for i in range(rows - 1):
-            results[i] = kron(matrices_arr[i + 1], matrices_arr[i])
-        results[rows - 1] = kron(matrices_arr[0], matrices_arr[rows - 1])
+    for i in range(rows - 1):
+        results[i] = kron(np.conj(matrices_arr[i + 1]), matrices_arr[i])
+    results[rows - 1] = kron(np.conj(matrices_arr[0]), matrices_arr[rows - 1])
     return results
 
 

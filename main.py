@@ -47,17 +47,17 @@ def config():
     """
 
     data_type = np.complex128
-    signal_lengths: [int] = [5]
+    signal_lengths: [int] = [10]
     observations_numbers: List[int] = [100000]
     approximation_ranks: List[Union[int, None]] = [2]
     noise_powers: List[float] = [0.0]
-    trials_num: int = 1
+    trials_num: int = 10
     first_seed: int = 200
     shifts_distribution_type = DistributionType.Uniform
     distribution_params: Dict = {
         DistributionParams.DeltaLocations: [1]
     }
-    experiment_name: str = "Error rate as a function on the observations number"
+    experiment_name: str = "Test2"
     results_path: str = r'Results/'
 
 
@@ -104,11 +104,12 @@ def main(signal_lengths: List[int], observations_numbers: List[int], approximati
                 observations_fourier, signal_length, approximation_rank, noise_power, data_type)
             current_error: float = calc_estimation_error(exact_covariance, estimated_covariance)
             mean_error += current_error
+            print(f'Current error: {current_error}')
             max_error = max(max_error, current_error)
 
         mean_error /= trials_num
         print(f'Finished experiment of signal length L={signal_length}, n={observations_num}, '
-              f'r={approximation_rank}, noise={noise_power} with error {mean_error}')
+              f'r={approximation_rank}, noise={noise_power} with mean error {mean_error} and max error {max_error}')
 
         # Appending all the experiment results to the log.
         results_log.append(LogFields.DataSize, signal_length)

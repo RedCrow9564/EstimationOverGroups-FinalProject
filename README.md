@@ -12,12 +12,12 @@ Any questions about this project may be sent by mail to 'eladeatah' at mail.tau.
 
 ### Prerequisites
 
-This code was developed for Windows10 OS and tested using the following Python 3.7.6 dependencies. These dependencies are listed in [requirements.txt](requirements.txt).
+This code was developed for Windows10 OS and tested using the following Python 3.7 dependencies. These dependencies are listed in [requirements.txt](requirements.txt).
 All these packages can be installed using the 'pip' package manager (when the command window is in the main directory where requirements.txt is located):
 ```
 pip install -r requirements.txt
 ```
-All the packages, except for Sacred, are available as well using 'conda' package manager.
+All the packages, except for [Sacred](https://sacred.readthedocs.io/en/stable/), are available as well using 'conda' package manager. It is highly-recommended that you use the IPython distribution, for which the [CVXPY](https://www.cvxpy.org/) library is better supported.
 
 ## Running the Unit-Tests
 
@@ -33,7 +33,7 @@ Running any of these tests can be performed by:
 <python_path> -m unittest <test_file_path>
 ```
 ## Acknowledgments
-Credits for the original algorithms, paper and results of [[1]](#1) belong to its respectful authors: [Prof. Yoel Shkolnisky](https://en-exact-sciences.tau.ac.il/profile/yoelsh) and Boris Landa.
+Credits for the original algorithms, paper and results of [[1]](#1) belong to its respectful authors: [Prof. Yoel Shkolnisky](https://en-exact-sciences.tau.ac.il/profile/yoelsh) and [Boris Landa](https://math.yale.edu/people/boris-landa).
 
 ## License
 
