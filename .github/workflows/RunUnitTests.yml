@@ -31,7 +31,9 @@ jobs:
         activate-environment: foo
     - name: Install dependencies
       run: |
-        conda install -c conda-forge --file requirements.txt
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        conda install -y -c conda-forge cvxpy cvxopt --force-reinstall
     - name: Lint with flake8
       run: |
         pip install flake8
@@ -41,4 +43,4 @@ jobs:
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
     - name: Test with unittest
       run: |
-        python -m unittest discover -s UnitTests -t UnitTests
+        python -m unittest discover -s UnitTests -t UnitTests -v
