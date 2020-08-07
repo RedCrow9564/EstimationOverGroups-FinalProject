@@ -25,6 +25,16 @@ from covariance_estimation import low_rank_multi_reference_factor_analysis
 
 
 def calc_estimation_error(exact_covariance, estimated_covariance):
+    """
+    This function measures the error of the estimator, given the covariance exact value.
+
+    Args:
+        exact_covariance(Matrix): The exact covariance (square) matrix in Fourier basis.
+        estimated_covariance(Matrix): The estimation for the exact covariance.
+
+    Returns:
+        The estimation error.
+    """
     covariance_norm: Scalar = norm(exact_covariance, ord='fro') ** 2
     rotated_cov: Matrix = exact_covariance
     error: Scalar = norm(estimated_covariance - rotated_cov, ord='fro') ** 2
@@ -47,7 +57,7 @@ def config():
     """
 
     data_type = np.complex128
-    signal_lengths: [int] = [10]
+    signal_lengths: [int] = [5]
     observations_numbers: List[int] = [100000]
     approximation_ranks: List[Union[int, None]] = [2]
     noise_powers: List[float] = [0.0]
