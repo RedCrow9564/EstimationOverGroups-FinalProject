@@ -28,6 +28,7 @@ jobs:
       uses: goanpeca/setup-miniconda@v1
       with:
         miniconda-version: "latest"
+        python-version: ${{ matrix.python-version }}
         activate-environment: foo
     - name: Install dependencies
       run: |
