@@ -56,18 +56,18 @@ def config():
     can be found in :mod:`enums.py`.
     """
 
-    data_type = np.complex128
-    signal_lengths: [int] = [5]
+    data_type = np.float64
+    signal_lengths: [int] = [16]
     observations_numbers: List[int] = [100000]
-    approximation_ranks: List[Union[int, None]] = [2]
+    approximation_ranks: List[Union[int, None]] = [12]
     noise_powers: List[float] = [0.0]
-    trials_num: int = 10
-    first_seed: int = 200
+    trials_num: int = 5
+    first_seed: int = 225
     shifts_distribution_type = DistributionType.Uniform
     distribution_params: Dict = {
         DistributionParams.DeltaLocations: [1]
     }
-    experiment_name: str = "Test2"
+    experiment_name: str = "L=16,r=12 - trials 26-30"
     results_path: str = r'Results/'
 
 

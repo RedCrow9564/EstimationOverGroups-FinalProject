@@ -52,8 +52,8 @@ class TestPhaseRetrievalActions(unittest.TestCase):
 
         """
         rng = Generator(PCG64(1995))
-        n: int = 5  # rng.integers(low=9, high=20)
-        r: int = 2  # rng.integers(low=2, high=np.floor(np.sqrt(n)))
+        n: int = rng.integers(low=9, high=20)
+        r: int = rng.integers(low=2, high=np.floor(np.sqrt(n)))
         mat: Matrix = generate_covariance(n, r, np.complex128, rng)[0]
         mat = change_to_fourier_basis(mat)
         

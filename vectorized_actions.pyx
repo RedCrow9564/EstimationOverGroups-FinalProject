@@ -81,7 +81,7 @@ def construct_estimator(double_or_complex[::1, :] diagonals, const double[::1] p
                         const int signal_length, const float noise_power) -> Matrix:
     """
     The function creates a signal_length times signal_length matrix such that the i-th row of the diagonals matrix
-    is the i-th diagonal of the matrix (with wrapping) for all 1<i<signal_length. The mai diagonal of this matrix
+    is the i-th diagonal of the matrix (with wrapping) for all 1<i<signal_length. The main diagonal of this matrix
     is set to the power-spectrum estimation, minus the estimated noise power.
 
     Args:
@@ -92,7 +92,7 @@ def construct_estimator(double_or_complex[::1, :] diagonals, const double[::1] p
         noise_power(const float): An estimation for the signal's noise power :math:`\sigma^{2}`.
 
     Returns:
-        A 3D array which stores all these Kronecker products along its first axis.
+        The created matrix.
     """
     cdef np.ndarray[double_or_complex, ndim=2] estimator = np.empty((signal_length, signal_length),
                                                                     dtype=diagonals.base.dtype)

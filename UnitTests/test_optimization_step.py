@@ -159,7 +159,5 @@ class TestOptimization(unittest.TestCase):
                   f'{optimization_error_upper_bound}')
 
 
-
-
 if __name__ == '__main__':
     unittest.main()
