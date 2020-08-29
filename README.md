@@ -17,7 +17,7 @@ All these packages can be installed using the 'pip' package manager (when the co
 ```
 pip install -r requirements.txt
 ```
-All the packages, except for [Sacred](https://sacred.readthedocs.io/en/stable/), are available as well using 'conda' package manager. It is highly-recommended that you use the IPython distribution, for which the [CVXPY](https://www.cvxpy.org/) library is better supported.
+All the packages, except for [Sacred](https://sacred.readthedocs.io/en/stable/), are available as well using 'conda' package manager. It is highly-recommended that the [CVXPY](https://www.cvxpy.org/) library is installed using the 'conda' package manager, and not 'pip'.
 
 ## Running the Unit-Tests
 
